@@ -1,0 +1,23 @@
+{
+  "name": "midi-visualizer",
+  "version": "1.0.0",
+  "description": "A web-based MIDI visualizer using WebGL",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode=production",
+    "start": "webpack serve --mode=development"
+  },
+  "dependencies": {
+    "@tonejs/midi": "^2.0.28",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "html-webpack-plugin": "^5.6.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}
