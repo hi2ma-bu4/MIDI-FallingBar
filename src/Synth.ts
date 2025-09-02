@@ -14,7 +14,7 @@ export class Synth {
 	private mainGain: GainNode;
 
 	private samplers: Map<string, Sampler> = new Map();
-	private activeInstrument = "triangle"; // Default instrument
+	private channelInstruments: Map<number, string> = new Map();
 
 	constructor() {
 		this.audioContext = new window.AudioContext();
@@ -37,32 +37,34 @@ export class Synth {
 		console.log(`${instrument} loaded.`);
 	}
 
-	public setInstrument(instrument: string): void {
-		this.activeInstrument = instrument;
+	public setInstrument(channel: number, instrument: string): void {
+		this.channelInstruments.set(channel, instrument);
 		if (!OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
 			this.loadSampler(instrument);
 		}
 	}
 
-	public playNote(note: Note): void {
+	public playNote(note: Note, channel: number, matchDuration = true): void {
 		if (this.audioContext.state === "suspended") {
 			this.audioContext.resume();
 		}
 
-		if (OSCILLATOR_TYPES.includes(this.activeInstrument as OscillatorType)) {
-			this.playOscillatorNote(note);
+		const instrument = this.channelInstruments.get(channel) || "triangle";
+
+		if (OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
+			this.playOscillatorNote(note, instrument as OscillatorType);
 		} else {
-			const sampler = this.samplers.get(this.activeInstrument);
+			const sampler = this.samplers.get(instrument);
 			if (sampler) {
-				sampler.playNote(note.midi, note.velocity, note.duration);
+				sampler.playNote(note.midi, note.velocity, note.duration, matchDuration);
 			} else {
-				console.warn(`Sampler for ${this.activeInstrument} not found. Playing fallback sound.`);
-				this.playOscillatorNote(note);
+				console.warn(`Sampler for ${instrument} not found. Playing fallback sound.`);
+				this.playOscillatorNote(note, instrument as OscillatorType);
 			}
 		}
 	}
 
-	private playOscillatorNote(note: Note): void {
+	private playOscillatorNote(note: Note, instrument: OscillatorType): void {
 		if (this.activeOscillators.has(note.midi)) {
 			return;
 		}
@@ -72,7 +74,7 @@ export class Synth {
 
 		const frequency = Math.pow(2, (note.midi - 69) / 12) * 440;
 		oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
-		oscillator.type = this.activeInstrument as OscillatorType;
+		oscillator.type = instrument;
 
 		gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
 		gainNode.gain.linearRampToValueAtTime(note.velocity, this.audioContext.currentTime + 0.05);
@@ -96,10 +98,9 @@ export class Synth {
 		}
 
 		// Also stop the note if it's a sampler
-		const sampler = this.samplers.get(this.activeInstrument);
-		if (sampler) {
+		this.samplers.forEach((sampler) => {
 			sampler.stopNote(midiNote);
-		}
+		});
 	}
 
 	public stopAllNotes(): void {

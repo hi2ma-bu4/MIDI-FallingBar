@@ -16,18 +16,20 @@
             <div id="progress"></div>
         </div>
         <div id="time-display">0:00 / 0:00</div>
-        <div id="instrument-selector">
-            <label for="instrument-select">Instrument:</label>
-            <select name="instruments" id="instrument-select">
-                <!-- Options will be populated by JavaScript -->
-            </select>
+        <div id="instrument-selectors-container">
+            <!-- Channel instrument selectors will be populated here -->
         </div>
         <div id="camera-controls">
             <input type="checkbox" id="top-down-view-toggle">
             <label for="top-down-view-toggle">Top-Down View</label>
         </div>
+        <div id="note-duration-control">
+            <input type="checkbox" id="match-note-duration-toggle" checked>
+            <label for="match-note-duration-toggle">Match Note Duration</label>
+        </div>
     </div>
 
     <div id="webgl-container"></div>
+    <div id="stats-display"></div>
 </body>
 </html>

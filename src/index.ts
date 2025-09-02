@@ -3,6 +3,7 @@ import type { Note } from "@tonejs/midi/dist/Note";
 import { AmbientLight, Clock, Color, DirectionalLight, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { NoteVisualizer } from "./NoteVisualizer";
 import { Piano } from "./Piano";
+import { Sampler } from "./Sampler";
 import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
 import { instruments } from "./instruments";
@@ -10,6 +11,7 @@ import "./style.css";
 
 interface PlayableNote {
 	note: Note;
+	channel: number;
 }
 
 class MidiVisualizer {
@@ -36,8 +38,11 @@ class MidiVisualizer {
 	private progressElement!: HTMLDivElement;
 	private timeDisplay!: HTMLDivElement;
 	private uiContainer!: HTMLDivElement;
-	private instrumentSelect!: HTMLSelectElement;
+	private statsDisplay!: HTMLDivElement;
+	private instrumentSelectorsContainer!: HTMLDivElement;
 	private topDownViewToggle!: HTMLInputElement;
+	private matchNoteDurationToggle!: HTMLInputElement;
+	private channelInstruments: Map<number, string> = new Map();
 
 	// Controls state
 	private initialPinchDistance = 0;
@@ -78,16 +83,12 @@ class MidiVisualizer {
 		this.progressBar = document.getElementById("progress-bar") as HTMLDivElement;
 		this.progressElement = document.getElementById("progress") as HTMLDivElement;
 		this.timeDisplay = document.getElementById("time-display") as HTMLDivElement;
-		this.instrumentSelect = document.getElementById("instrument-select") as HTMLSelectElement;
-
-		this.populateInstrumentSelector();
+		this.statsDisplay = document.getElementById("stats-display") as HTMLDivElement;
+		this.instrumentSelectorsContainer = document.getElementById("instrument-selectors-container") as HTMLDivElement;
+		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.progressBar.addEventListener("click", (e) => this.handleSeek(e));
-		this.instrumentSelect.addEventListener("change", (e) => {
-			const target = e.target as HTMLSelectElement;
-			this.synth.setInstrument(target.value);
-		});
 
 		this.topDownViewToggle = document.getElementById("top-down-view-toggle") as HTMLInputElement;
 		this.topDownViewToggle.addEventListener("change", (e) => {
@@ -105,19 +106,50 @@ class MidiVisualizer {
 		const fileInput = document.getElementById("midi-file") as HTMLInputElement;
 		fileInput.addEventListener("change", (event) => this.handleMidiFile(event));
 
+		document.addEventListener("visibilitychange", () => this.handleVisibilityChange());
+
 		this.initDragAndDrop();
 		this.initControls();
 	}
 
-	private populateInstrumentSelector(): void {
-		instruments.forEach((instrument, index) => {
-			const option = document.createElement("option");
-			option.value = instrument.value;
-			option.textContent = instrument.text;
-			if (index === 0) {
-				option.selected = true;
-			}
-			this.instrumentSelect.appendChild(option);
+	private populateChannelInstrumentSelectors(channels: number[]): void {
+		this.instrumentSelectorsContainer.innerHTML = ""; // Clear previous selectors
+
+		channels.forEach(channel => {
+			const channelDiv = document.createElement("div");
+			channelDiv.className = "channel-instrument-selector";
+
+			const label = document.createElement("label");
+			label.textContent = `Ch ${channel + 1}:`;
+			label.htmlFor = `instrument-select-ch-${channel}`;
+
+			const select = document.createElement("select");
+			select.id = `instrument-select-ch-${channel}`;
+			select.dataset.channel = channel.toString();
+
+			instruments.forEach((instrument, index) => {
+				const option = document.createElement("option");
+				option.value = instrument.value;
+				option.textContent = instrument.text;
+				select.appendChild(option);
+			});
+
+			// Set default instrument
+			const defaultInstrument = instruments[0].value;
+			select.value = defaultInstrument;
+			this.synth.setInstrument(channel, defaultInstrument);
+			this.channelInstruments.set(channel, defaultInstrument);
+
+			select.addEventListener("change", (e) => {
+				const target = e.target as HTMLSelectElement;
+				const selectedInstrument = target.value;
+				this.channelInstruments.set(channel, selectedInstrument);
+				this.synth.setInstrument(channel, selectedInstrument);
+			});
+
+			channelDiv.appendChild(label);
+			channelDiv.appendChild(select);
+			this.instrumentSelectorsContainer.appendChild(channelDiv);
 		});
 	}
 
@@ -236,17 +268,23 @@ class MidiVisualizer {
 		try {
 			this.midiData = new Midi(arrayBuffer);
 			this.noteVisualizer.visualize(this.midiData);
+			this.channelInstruments.clear();
 
+			const channels = new Set<number>();
 			this.notesToPlay = this.midiData.tracks
 				.flatMap((track) => {
 					// Ignore percussion track for now
 					if (track.channel === 9) return [];
-					return track.notes.map((note) => ({ note }));
+					channels.add(track.channel);
+					return track.notes.map((note) => ({ note, channel: track.channel }));
 				})
 				.sort((a, b) => a.note.time - b.note.time);
 
+			this.populateChannelInstrumentSelectors(Array.from(channels).sort((a, b) => a - b));
+
 			this.resetPlayback();
 			this.uiContainer.style.display = "flex";
+			this.statsDisplay.style.display = "block";
 			this.updateUI();
 		} catch (error) {
 			console.error("Error parsing MIDI file:", error);
@@ -261,6 +299,9 @@ class MidiVisualizer {
 		this.nextNoteIndex = 0;
 		this.noteVisualizer.noteObjects.position.z = 0;
 		this.playPauseBtn.textContent = "Play";
+		if (this.statsDisplay) {
+			this.statsDisplay.style.display = "none";
+		}
 
 		this.synth.stopAllNotes();
 		this.activeNotes.forEach((note) => this.piano.releaseKey(note.midi));
@@ -314,6 +355,12 @@ class MidiVisualizer {
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 	}
 
+	private handleVisibilityChange(): void {
+		if (document.hidden && this.isPlaying) {
+			this.togglePlayback();
+		}
+	}
+
 	private formatTime(seconds: number): string {
 		const minutes = Math.floor(seconds / 60);
 		const secs = Math.floor(seconds % 60);
@@ -328,6 +375,12 @@ class MidiVisualizer {
 		const currentTime = this.formatTime(this.elapsedTime);
 		const totalTime = this.formatTime(this.midiData.duration);
 		this.timeDisplay.textContent = `${currentTime} / ${totalTime}`;
+
+		// Update note statistics
+		const totalNotes = this.notesToPlay.length;
+		const playedNotes = this.notesToPlay.filter(p => p.note.time + p.note.duration < this.elapsedTime).length;
+		const percentage = totalNotes > 0 ? ((playedNotes / totalNotes) * 100).toFixed(0) : 0;
+		this.statsDisplay.textContent = `Notes: ${playedNotes} / ${totalNotes} (${percentage}%)`;
 	}
 
 	private onWindowResize(): void {
@@ -348,8 +401,9 @@ class MidiVisualizer {
 
 		// Notes ON
 		while (this.nextNoteIndex < this.notesToPlay.length && this.notesToPlay[this.nextNoteIndex].note.time <= this.elapsedTime) {
-			const { note } = this.notesToPlay[this.nextNoteIndex];
-			this.synth.playNote(note);
+			const { note, channel } = this.notesToPlay[this.nextNoteIndex];
+			const matchDuration = this.matchNoteDurationToggle.checked;
+			this.synth.playNote(note, channel, matchDuration);
 			this.piano.pressKey(note.midi);
 			this.activeNotes.set(note.midi, note);
 			this.nextNoteIndex++;
