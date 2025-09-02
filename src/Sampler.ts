@@ -2,6 +2,7 @@ export class Sampler {
 	private readonly audioContext: AudioContext;
 	private readonly samples: Map<string, AudioBuffer> = new Map();
 	private readonly instrument: string;
+	private readonly activeSources: Map<number, { source: AudioBufferSourceNode; gainNode: GainNode }> = new Map();
 	private readonly baseUrl = "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/";
 
 	private readonly noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -37,20 +38,21 @@ export class Sampler {
 		}
 	}
 
-	public playNote(midi: number, velocity: number): void {
+	public playNote(midi: number, velocity: number, duration: number): void {
 		if (this.samples.size === 0) {
 			console.warn(`No samples loaded for ${this.instrument}, cannot play note.`);
 			return;
 		}
 
-		// Find the closest sample
+		// Stop any existing note at this midi pitch
+		if (this.activeSources.has(midi)) {
+			this.stopNote(midi);
+		}
+
 		const noteName = this.midiToNoteName(midi);
-		const fundamental = noteName.substring(0, noteName.length - 1);
 		let closestSampleName = "";
 		let minDistance = Infinity;
 
-		// A very simple way to find the closest sample - assumes samples are named like "C4"
-		// A better implementation would parse the note names properly.
 		const availableNotes = Array.from(this.samples.keys());
 		availableNotes.forEach((sampleNote) => {
 			const sampleMidi = this.noteNameToMidi(sampleNote);
@@ -67,18 +69,55 @@ export class Sampler {
 		const source = this.audioContext.createBufferSource();
 		source.buffer = sampleBuffer;
 
-		// Pitch shift
 		const closestMidi = this.noteNameToMidi(closestSampleName);
-		const detune = (midi - closestMidi) * 100;
-		source.detune.value = detune;
+		source.detune.value = (midi - closestMidi) * 100;
 
-		// Volume
 		const gainNode = this.audioContext.createGain();
 		gainNode.gain.setValueAtTime(velocity, this.audioContext.currentTime);
 		gainNode.connect(this.audioContext.destination);
 
 		source.connect(gainNode);
-		source.start();
+		source.start(this.audioContext.currentTime);
+
+		this.activeSources.set(midi, { source, gainNode });
+
+		// Schedule the note to stop
+		const releaseTime = 0.1; // 100ms fade out
+		const stopTime = this.audioContext.currentTime + duration - releaseTime;
+		if (stopTime > this.audioContext.currentTime) {
+			gainNode.gain.setValueAtTime(velocity, stopTime);
+			gainNode.gain.linearRampToValueAtTime(0, stopTime + releaseTime);
+			source.stop(stopTime + releaseTime);
+		} else {
+			// If the note is too short, just stop it immediately
+			gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+			source.stop(this.audioContext.currentTime);
+		}
+
+
+		source.onended = () => {
+			// Clean up the active source map when the note finishes playing
+			this.activeSources.delete(midi);
+		};
+	}
+
+	public stopNote(midi: number): void {
+		const activeSource = this.activeSources.get(midi);
+		if (activeSource) {
+			const { source, gainNode } = activeSource;
+			// A quick fade out to prevent clicks
+			const releaseTime = 0.05;
+			gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+			gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + releaseTime);
+			source.stop(this.audioContext.currentTime + releaseTime);
+			this.activeSources.delete(midi);
+		}
+	}
+
+	public stopAllNotes(): void {
+		this.activeSources.forEach((_, midi) => {
+			this.stopNote(midi);
+		});
 	}
 
 	// Helper to convert MIDI number to note name (e.g., 60 -> C4)
