@@ -5,6 +5,7 @@ import { NoteVisualizer } from "./NoteVisualizer";
 import { Piano } from "./Piano";
 import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
+import { instruments } from "./instruments";
 import "./style.css";
 
 interface PlayableNote {
@@ -36,6 +37,7 @@ class MidiVisualizer {
 	private timeDisplay!: HTMLDivElement;
 	private uiContainer!: HTMLDivElement;
 	private instrumentSelect!: HTMLSelectElement;
+	private topDownViewToggle!: HTMLInputElement;
 
 	// Controls state
 	private initialPinchDistance = 0;
@@ -78,11 +80,24 @@ class MidiVisualizer {
 		this.timeDisplay = document.getElementById("time-display") as HTMLDivElement;
 		this.instrumentSelect = document.getElementById("instrument-select") as HTMLSelectElement;
 
+		this.populateInstrumentSelector();
+
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.progressBar.addEventListener("click", (e) => this.handleSeek(e));
 		this.instrumentSelect.addEventListener("change", (e) => {
 			const target = e.target as HTMLSelectElement;
 			this.synth.setInstrument(target.value);
+		});
+
+		this.topDownViewToggle = document.getElementById("top-down-view-toggle") as HTMLInputElement;
+		this.topDownViewToggle.addEventListener("change", (e) => {
+			const isTopDown = (e.target as HTMLInputElement).checked;
+			if (isTopDown) {
+				this.camera.position.set(0, 20, 0);
+			} else {
+				this.camera.position.set(0, 8, 12);
+			}
+			this.camera.lookAt(0, 0, 0);
 		});
 
 		window.addEventListener("resize", this.onWindowResize.bind(this), false);
@@ -92,6 +107,18 @@ class MidiVisualizer {
 
 		this.initDragAndDrop();
 		this.initControls();
+	}
+
+	private populateInstrumentSelector(): void {
+		instruments.forEach((instrument, index) => {
+			const option = document.createElement("option");
+			option.value = instrument.value;
+			option.textContent = instrument.text;
+			if (index === 0) {
+				option.selected = true;
+			}
+			this.instrumentSelect.appendChild(option);
+		});
 	}
 
 	private initControls(): void {

@@ -54,7 +54,7 @@ export class Synth {
 		} else {
 			const sampler = this.samplers.get(this.activeInstrument);
 			if (sampler) {
-				sampler.playNote(note.midi, note.velocity);
+				sampler.playNote(note.midi, note.velocity, note.duration);
 			} else {
 				console.warn(`Sampler for ${this.activeInstrument} not found. Playing fallback sound.`);
 				this.playOscillatorNote(note);
@@ -94,14 +94,22 @@ export class Synth {
 			activeOsc.oscillator.stop(this.audioContext.currentTime + releaseTime);
 			this.activeOscillators.delete(midiNote);
 		}
-		// Note: stopNote for samplers is not implemented, as samples will play out.
+
+		// Also stop the note if it's a sampler
+		const sampler = this.samplers.get(this.activeInstrument);
+		if (sampler) {
+			sampler.stopNote(midiNote);
+		}
 	}
 
 	public stopAllNotes(): void {
 		this.activeOscillators.forEach((_, midiNote) => {
 			this.stopNote(midiNote);
 		});
-		// No need to stop samplers explicitly for now
+
+		this.samplers.forEach((sampler) => {
+			sampler.stopAllNotes();
+		});
 	}
 
 	public resumeContext(): void {
