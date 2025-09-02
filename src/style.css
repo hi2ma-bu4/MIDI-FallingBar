@@ -55,3 +55,21 @@ canvas {
 	min-width: 100px;
 	text-align: center;
 }
+
+body.drag-over::before {
+	align-items: center;
+	background: rgba(0, 0, 0, .5);
+	border: 4px dashed #fff;
+	box-sizing: border-box;
+	color: white;
+	content: "Drop MIDI file here";
+	display: flex;
+	font-size: 2em;
+	height: 100vh;
+	justify-content: center;
+	left: 0;
+	position: fixed;
+	top: 0;
+	width: 100vw;
+	z-index: 9999;
+}

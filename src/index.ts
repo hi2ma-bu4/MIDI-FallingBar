@@ -7,6 +7,41 @@ import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
 import "./style.css";
 
+// A simple mapping from MIDI program numbers to oscillator types
+const programToInstrument = (program: number): OscillatorType => {
+	// Piano
+	if (program >= 0 && program <= 7) return "triangle";
+	// Chromatic Percussion
+	if (program >= 8 && program <= 15) return "sine";
+	// Organ
+	if (program >= 16 && program <= 23) return "sine";
+	// Guitar
+	if (program >= 24 && program <= 31) return "sine";
+	// Bass
+	if (program >= 32 && program <= 39) return "sawtooth";
+	// Strings
+	if (program >= 40 && program <= 47) return "square";
+	// Ensemble
+	if (program >= 48 && program <= 55) return "square";
+	// Brass
+	if (program >= 56 && program <= 63) return "sawtooth";
+	// Reed
+	if (program >= 64 && program <= 71) return "sawtooth";
+	// Pipe
+	if (program >= 72 && program <= 79) return "sine";
+	// Synth Lead
+	if (program >= 80 && program <= 87) return "sawtooth";
+	// Synth Pad
+	if (program >= 88 && program <= 95) return "square";
+
+	return "triangle"; // Default
+};
+
+interface PlayableNote {
+	note: Note;
+	instrument: OscillatorType;
+}
+
 class MidiVisualizer {
 	private scene: Scene;
 	private camera: PerspectiveCamera;
@@ -21,7 +56,7 @@ class MidiVisualizer {
 	private midiData: Midi | null = null;
 	private playbackStartTime = 0;
 	private elapsedTime = 0;
-	private notesToPlay: Note[] = [];
+	private notesToPlay: PlayableNote[] = [];
 	private nextNoteIndex = 0;
 	private activeNotes: Map<number, Note> = new Map();
 
@@ -76,6 +111,52 @@ class MidiVisualizer {
 
 		const fileInput = document.getElementById("midi-file") as HTMLInputElement;
 		fileInput.addEventListener("change", (event) => this.handleMidiFile(event));
+
+		this.initDragAndDrop();
+		this.initZoom();
+	}
+
+	private initZoom(): void {
+		const container = document.getElementById("webgl-container")!;
+		container.addEventListener("wheel", (event) => {
+			event.preventDefault();
+			const zoomSpeed = 0.01;
+			this.camera.position.z += event.deltaY * zoomSpeed;
+
+			// Clamp zoom
+			this.camera.position.z = Math.max(5, Math.min(this.camera.position.z, 50));
+		});
+	}
+
+	private initDragAndDrop(): void {
+		const dropZone = document.body;
+
+		dropZone.addEventListener("dragover", (event) => {
+			event.preventDefault();
+			dropZone.classList.add("drag-over");
+		});
+
+		dropZone.addEventListener("dragleave", () => {
+			dropZone.classList.remove("drag-over");
+		});
+
+		dropZone.addEventListener("drop", (event) => {
+			event.preventDefault();
+			dropZone.classList.remove("drag-over");
+
+			if (event.dataTransfer?.files) {
+				const file = event.dataTransfer.files[0];
+				if (file) {
+					this.synth.resumeContext();
+					const reader = new FileReader();
+					reader.onload = (e) => {
+						const arrayBuffer = e.target?.result as ArrayBuffer;
+						if (arrayBuffer) this.loadMidi(arrayBuffer);
+					};
+					reader.readAsArrayBuffer(file);
+				}
+			}
+		});
 	}
 
 	private handleMidiFile(event: Event): void {
@@ -96,7 +177,15 @@ class MidiVisualizer {
 			this.midiData = new Midi(arrayBuffer);
 			this.noteVisualizer.visualize(this.midiData);
 
-			this.notesToPlay = this.midiData.tracks.flatMap((track) => track.notes).sort((a, b) => a.time - b.time);
+			this.notesToPlay = this.midiData.tracks
+				.flatMap((track) => {
+					// For each track, map its notes to a PlayableNote object
+					const instrument = programToInstrument(track.instrument.number);
+					// Ignore percussion track for now
+					if (track.channel === 9) return [];
+					return track.notes.map((note) => ({ note, instrument }));
+				})
+				.sort((a, b) => a.note.time - b.note.time);
 
 			this.resetPlayback();
 			this.uiContainer.style.display = "flex";
@@ -150,12 +239,12 @@ class MidiVisualizer {
 		this.activeNotes.clear();
 
 		// Find the next note to be played
-		this.nextNoteIndex = this.notesToPlay.findIndex((note) => note.time >= this.elapsedTime);
+		this.nextNoteIndex = this.notesToPlay.findIndex((playableNote) => playableNote.note.time >= this.elapsedTime);
 		if (this.nextNoteIndex === -1) this.nextNoteIndex = this.notesToPlay.length;
 
 		// Recover notes that should be active at the seek time
 		for (let i = 0; i < this.nextNoteIndex; i++) {
-			const note = this.notesToPlay[i];
+			const { note } = this.notesToPlay[i];
 			if (note.time + note.duration > this.elapsedTime) {
 				this.piano.pressKey(note.midi);
 				this.activeNotes.set(note.midi, note);
@@ -196,9 +285,9 @@ class MidiVisualizer {
 		}
 
 		// Notes ON
-		while (this.nextNoteIndex < this.notesToPlay.length && this.notesToPlay[this.nextNoteIndex].time <= this.elapsedTime) {
-			const note = this.notesToPlay[this.nextNoteIndex];
-			this.synth.playNote(note.midi);
+		while (this.nextNoteIndex < this.notesToPlay.length && this.notesToPlay[this.nextNoteIndex].note.time <= this.elapsedTime) {
+			const { note, instrument } = this.notesToPlay[this.nextNoteIndex];
+			this.synth.playNote(note, instrument);
 			this.piano.pressKey(note.midi);
 			this.activeNotes.set(note.midi, note);
 			this.nextNoteIndex++;

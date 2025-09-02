@@ -57,7 +57,9 @@ export class NoteVisualizer {
 				const keyWidth = this.piano.isBlackKey(midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 
 				const matrix = new Matrix4();
-				const position = new Vector3(keyPosition.x, keyPosition.y + NOTE_BAR_HEIGHT / 2 + 0.1, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
+				// Add a small vertical offset based on the channel to prevent Z-fighting
+				const yOffset = channel * 0.001;
+				const position = new Vector3(keyPosition.x, keyPosition.y + NOTE_BAR_HEIGHT / 2 + 0.1 + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
 				const scale = new Vector3(keyWidth * 0.9, 1, duration * TIME_SCALE);
 				const quaternion = new Quaternion();
 
