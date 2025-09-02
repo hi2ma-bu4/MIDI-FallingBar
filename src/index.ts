@@ -7,39 +7,8 @@ import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
 import "./style.css";
 
-// A simple mapping from MIDI program numbers to oscillator types
-const programToInstrument = (program: number): OscillatorType => {
-	// Piano
-	if (program >= 0 && program <= 7) return "triangle";
-	// Chromatic Percussion
-	if (program >= 8 && program <= 15) return "sine";
-	// Organ
-	if (program >= 16 && program <= 23) return "sine";
-	// Guitar
-	if (program >= 24 && program <= 31) return "sine";
-	// Bass
-	if (program >= 32 && program <= 39) return "sawtooth";
-	// Strings
-	if (program >= 40 && program <= 47) return "square";
-	// Ensemble
-	if (program >= 48 && program <= 55) return "square";
-	// Brass
-	if (program >= 56 && program <= 63) return "sawtooth";
-	// Reed
-	if (program >= 64 && program <= 71) return "sawtooth";
-	// Pipe
-	if (program >= 72 && program <= 79) return "sine";
-	// Synth Lead
-	if (program >= 80 && program <= 87) return "sawtooth";
-	// Synth Pad
-	if (program >= 88 && program <= 95) return "square";
-
-	return "triangle"; // Default
-};
-
 interface PlayableNote {
 	note: Note;
-	instrument: OscillatorType;
 }
 
 class MidiVisualizer {
@@ -66,6 +35,10 @@ class MidiVisualizer {
 	private progressElement!: HTMLDivElement;
 	private timeDisplay!: HTMLDivElement;
 	private uiContainer!: HTMLDivElement;
+	private instrumentSelect!: HTMLSelectElement;
+
+	// Controls state
+	private initialPinchDistance = 0;
 
 	constructor() {
 		this.scene = new Scene();
@@ -103,9 +76,14 @@ class MidiVisualizer {
 		this.progressBar = document.getElementById("progress-bar") as HTMLDivElement;
 		this.progressElement = document.getElementById("progress") as HTMLDivElement;
 		this.timeDisplay = document.getElementById("time-display") as HTMLDivElement;
+		this.instrumentSelect = document.getElementById("instrument-select") as HTMLSelectElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.progressBar.addEventListener("click", (e) => this.handleSeek(e));
+		this.instrumentSelect.addEventListener("change", (e) => {
+			const target = e.target as HTMLSelectElement;
+			this.synth.setInstrument(target.value);
+		});
 
 		window.addEventListener("resize", this.onWindowResize.bind(this), false);
 
@@ -113,18 +91,73 @@ class MidiVisualizer {
 		fileInput.addEventListener("change", (event) => this.handleMidiFile(event));
 
 		this.initDragAndDrop();
-		this.initZoom();
+		this.initControls();
 	}
 
-	private initZoom(): void {
+	private initControls(): void {
 		const container = document.getElementById("webgl-container")!;
-		container.addEventListener("wheel", (event) => {
-			event.preventDefault();
-			const zoomSpeed = 0.01;
-			this.camera.position.z += event.deltaY * zoomSpeed;
 
-			// Clamp zoom
-			this.camera.position.z = Math.max(5, Math.min(this.camera.position.z, 50));
+		const clampZoom = (z: number) => Math.max(5, Math.min(z, 50));
+
+		// Mouse wheel zoom
+		container.addEventListener(
+			"wheel",
+			(event) => {
+				event.preventDefault();
+				const zoomSpeed = 0.01;
+				this.camera.position.z = clampZoom(this.camera.position.z + event.deltaY * zoomSpeed);
+			},
+			{ passive: false }
+		);
+
+		// Keyboard zoom
+		window.addEventListener("keydown", (event) => {
+			let zoomAmount = 0;
+			if (event.key === "-" || event.key === "_") {
+				zoomAmount = 0.5;
+			} else if (event.key === "^" || event.key === "+" || event.key === "=") {
+				zoomAmount = -0.5;
+			}
+
+			if (zoomAmount !== 0) {
+				this.camera.position.z = clampZoom(this.camera.position.z + zoomAmount);
+			}
+		});
+
+		// Touch pinch-to-zoom
+		container.addEventListener(
+			"touchstart",
+			(event) => {
+				if (event.touches.length === 2) {
+					event.preventDefault();
+					this.initialPinchDistance = Math.hypot(event.touches[0].pageX - event.touches[1].pageX, event.touches[0].pageY - event.touches[1].pageY);
+				}
+			},
+			{ passive: false }
+		);
+
+		container.addEventListener(
+			"touchmove",
+			(event) => {
+				if (event.touches.length === 2) {
+					event.preventDefault();
+					const currentPinchDistance = Math.hypot(event.touches[0].pageX - event.touches[1].pageX, event.touches[0].pageY - event.touches[1].pageY);
+					const pinchDelta = currentPinchDistance - this.initialPinchDistance;
+					const zoomSpeed = 0.05;
+
+					this.camera.position.z = clampZoom(this.camera.position.z - pinchDelta * zoomSpeed);
+
+					// Update initial distance for next move event
+					this.initialPinchDistance = currentPinchDistance;
+				}
+			},
+			{ passive: false }
+		);
+
+		container.addEventListener("touchend", (event) => {
+			if (event.touches.length < 2) {
+				this.initialPinchDistance = 0;
+			}
 		});
 	}
 
@@ -179,11 +212,9 @@ class MidiVisualizer {
 
 			this.notesToPlay = this.midiData.tracks
 				.flatMap((track) => {
-					// For each track, map its notes to a PlayableNote object
-					const instrument = programToInstrument(track.instrument.number);
 					// Ignore percussion track for now
 					if (track.channel === 9) return [];
-					return track.notes.map((note) => ({ note, instrument }));
+					return track.notes.map((note) => ({ note }));
 				})
 				.sort((a, b) => a.note.time - b.note.time);
 
@@ -207,6 +238,7 @@ class MidiVisualizer {
 		this.synth.stopAllNotes();
 		this.activeNotes.forEach((note) => this.piano.releaseKey(note.midi));
 		this.activeNotes.clear();
+		this.noteVisualizer.resetVisuals();
 	}
 
 	private togglePlayback(): void {
@@ -237,19 +269,22 @@ class MidiVisualizer {
 		this.synth.stopAllNotes();
 		this.activeNotes.forEach((note) => this.piano.releaseKey(note.midi));
 		this.activeNotes.clear();
+		this.noteVisualizer.resetVisuals();
 
 		// Find the next note to be played
 		this.nextNoteIndex = this.notesToPlay.findIndex((playableNote) => playableNote.note.time >= this.elapsedTime);
 		if (this.nextNoteIndex === -1) this.nextNoteIndex = this.notesToPlay.length;
 
 		// Recover notes that should be active at the seek time
-		for (let i = 0; i < this.nextNoteIndex; i++) {
+		for (let i = 0; i < this.notesToPlay.length; i++) {
 			const { note } = this.notesToPlay[i];
-			if (note.time + note.duration > this.elapsedTime) {
+			// A note is active if the seek time is between its start and end times
+			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
 				this.piano.pressKey(note.midi);
 				this.activeNotes.set(note.midi, note);
 			}
 		}
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 	}
 
 	private formatTime(seconds: number): string {
@@ -286,8 +321,8 @@ class MidiVisualizer {
 
 		// Notes ON
 		while (this.nextNoteIndex < this.notesToPlay.length && this.notesToPlay[this.nextNoteIndex].note.time <= this.elapsedTime) {
-			const { note, instrument } = this.notesToPlay[this.nextNoteIndex];
-			this.synth.playNote(note, instrument);
+			const { note } = this.notesToPlay[this.nextNoteIndex];
+			this.synth.playNote(note);
 			this.piano.pressKey(note.midi);
 			this.activeNotes.set(note.midi, note);
 			this.nextNoteIndex++;
@@ -309,6 +344,7 @@ class MidiVisualizer {
 	private animate(): void {
 		requestAnimationFrame(this.animate.bind(this));
 		this.updatePlayback();
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 		this.renderer.render(this.scene, this.camera);
 	}
 }

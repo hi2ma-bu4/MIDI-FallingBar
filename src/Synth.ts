@@ -1,29 +1,69 @@
 import type { Note } from "@tonejs/midi/dist/Note";
+import { Sampler } from "./Sampler";
 
-interface ActiveNote {
+interface ActiveOscillator {
 	oscillator: OscillatorNode;
 	gainNode: GainNode;
 }
 
+const OSCILLATOR_TYPES: OscillatorType[] = ["sine", "square", "sawtooth", "triangle"];
+
 export class Synth {
 	private audioContext: AudioContext;
-	private activeNotes: Map<number, ActiveNote> = new Map();
+	private activeOscillators: Map<number, ActiveOscillator> = new Map();
 	private mainGain: GainNode;
+
+	private samplers: Map<string, Sampler> = new Map();
+	private activeInstrument = "triangle"; // Default instrument
 
 	constructor() {
 		this.audioContext = new window.AudioContext();
 		this.mainGain = this.audioContext.createGain();
-		this.mainGain.gain.value = 0.3; // Master volume, reduced to prevent clipping
+		this.mainGain.gain.value = 0.3;
 		this.mainGain.connect(this.audioContext.destination);
+
+		// Pre-load piano sampler
+		this.loadSampler("piano");
 	}
 
-	public playNote(note: Note, instrument: OscillatorType = "triangle"): void {
+	private async loadSampler(instrument: string): Promise<void> {
+		if (this.samplers.has(instrument)) {
+			return;
+		}
+		console.log(`Loading ${instrument}...`);
+		const sampler = new Sampler(this.audioContext, instrument);
+		this.samplers.set(instrument, sampler);
+		await sampler.load();
+		console.log(`${instrument} loaded.`);
+	}
+
+	public setInstrument(instrument: string): void {
+		this.activeInstrument = instrument;
+		if (!OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
+			this.loadSampler(instrument);
+		}
+	}
+
+	public playNote(note: Note): void {
 		if (this.audioContext.state === "suspended") {
 			this.audioContext.resume();
 		}
 
-		// Avoid re-triggering if the note is already playing
-		if (this.activeNotes.has(note.midi)) {
+		if (OSCILLATOR_TYPES.includes(this.activeInstrument as OscillatorType)) {
+			this.playOscillatorNote(note);
+		} else {
+			const sampler = this.samplers.get(this.activeInstrument);
+			if (sampler) {
+				sampler.playNote(note.midi, note.velocity);
+			} else {
+				console.warn(`Sampler for ${this.activeInstrument} not found. Playing fallback sound.`);
+				this.playOscillatorNote(note);
+			}
+		}
+	}
+
+	private playOscillatorNote(note: Note): void {
+		if (this.activeOscillators.has(note.midi)) {
 			return;
 		}
 
@@ -32,39 +72,36 @@ export class Synth {
 
 		const frequency = Math.pow(2, (note.midi - 69) / 12) * 440;
 		oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
-		oscillator.type = instrument;
+		oscillator.type = this.activeInstrument as OscillatorType;
 
-		// Attack based on velocity
 		gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-		gainNode.gain.linearRampToValueAtTime(note.velocity, this.audioContext.currentTime + 0.05); // Attack time
+		gainNode.gain.linearRampToValueAtTime(note.velocity, this.audioContext.currentTime + 0.05);
 
 		oscillator.connect(gainNode);
 		gainNode.connect(this.mainGain);
-
 		oscillator.start();
 
-		this.activeNotes.set(note.midi, { oscillator, gainNode });
+		this.activeOscillators.set(note.midi, { oscillator, gainNode });
 	}
 
 	public stopNote(midiNote: number): void {
-		const note = this.activeNotes.get(midiNote);
-		if (note) {
-			// Release
+		const activeOsc = this.activeOscillators.get(midiNote);
+		if (activeOsc) {
 			const releaseTime = 0.3;
-			note.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-			note.gainNode.gain.setValueAtTime(note.gainNode.gain.value, this.audioContext.currentTime);
-			note.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + releaseTime);
-
-			note.oscillator.stop(this.audioContext.currentTime + releaseTime);
-
-			this.activeNotes.delete(midiNote);
+			activeOsc.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+			activeOsc.gainNode.gain.setValueAtTime(activeOsc.gainNode.gain.value, this.audioContext.currentTime);
+			activeOsc.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + releaseTime);
+			activeOsc.oscillator.stop(this.audioContext.currentTime + releaseTime);
+			this.activeOscillators.delete(midiNote);
 		}
+		// Note: stopNote for samplers is not implemented, as samples will play out.
 	}
 
 	public stopAllNotes(): void {
-		this.activeNotes.forEach((note, midiNote) => {
+		this.activeOscillators.forEach((_, midiNote) => {
 			this.stopNote(midiNote);
 		});
+		// No need to stop samplers explicitly for now
 	}
 
 	public resumeContext(): void {
