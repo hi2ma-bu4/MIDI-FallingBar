@@ -1,3 +1,5 @@
+import { MATCH_NOTE_DURATION } from "./constants";
+
 export class Sampler {
 	private readonly audioContext: AudioContext;
 	private readonly samples: Map<string, AudioBuffer> = new Map();
@@ -81,17 +83,18 @@ export class Sampler {
 
 		this.activeSources.set(midi, { source, gainNode });
 
-		// Schedule the note to stop
-		const releaseTime = 0.1; // 100ms fade out
-		const stopTime = this.audioContext.currentTime + duration - releaseTime;
-		if (stopTime > this.audioContext.currentTime) {
-			gainNode.gain.setValueAtTime(velocity, stopTime);
-			gainNode.gain.linearRampToValueAtTime(0, stopTime + releaseTime);
-			source.stop(stopTime + releaseTime);
-		} else {
-			// If the note is too short, just stop it immediately
-			gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-			source.stop(this.audioContext.currentTime);
+		if (MATCH_NOTE_DURATION) {
+			// Schedule the note to stop
+			const releaseTime = 0.1; // 100ms fade out
+			const stopTime = this.audioContext.currentTime + duration;
+			if (duration > releaseTime) {
+				const rampStartTime = stopTime - releaseTime;
+				gainNode.gain.setValueAtTime(velocity, rampStartTime);
+				gainNode.gain.linearRampToValueAtTime(0, stopTime);
+			} else {
+				gainNode.gain.linearRampToValueAtTime(0, stopTime);
+			}
+			source.stop(stopTime);
 		}
 
 
