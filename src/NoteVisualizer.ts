@@ -16,6 +16,8 @@ interface NoteInstance {
 	instanceId: number;
 	originalColor: Color;
 	note: Note;
+	channel: number;
+	visible: boolean;
 }
 
 export class NoteVisualizer {
@@ -87,6 +89,8 @@ export class NoteVisualizer {
 					instanceId: index,
 					originalColor,
 					note,
+					channel: channel,
+					visible: true,
 				};
 				this.noteMap.set(noteKey, noteInstance);
 			});
@@ -109,8 +113,70 @@ export class NoteVisualizer {
 			activeNoteKeys.add(`${note.midi}-${note.time}`);
 		});
 
-		this.notesByTime.forEach((instance) => {
-			const { mesh, instanceId, originalColor, note } = instance;
+		const visibleStartTime = elapsedTime - 5;
+		const visibleEndTime = elapsedTime + 15;
+
+		const meshesToUpdate = new Set<InstancedMesh>();
+
+		// Find the starting index for iteration
+		let startIndex = 0;
+		for (let i = 0; i < this.notesByTime.length; i++) {
+			const note = this.notesByTime[i].note;
+			if (note.time + note.duration >= visibleStartTime) {
+				startIndex = i;
+				break;
+			}
+			// Hide notes that are far in the past
+			const instance = this.notesByTime[i];
+			if (instance.visible) {
+				instance.visible = false;
+				const matrix = new Matrix4();
+				instance.mesh.getMatrixAt(instance.instanceId, matrix);
+				const position = new Vector3();
+				const quaternion = new Quaternion();
+				matrix.decompose(position, quaternion, new Vector3());
+				matrix.compose(position, quaternion, new Vector3(0, 0, 0));
+				instance.mesh.setMatrixAt(instance.instanceId, matrix);
+				meshesToUpdate.add(instance.mesh);
+			}
+		}
+
+		for (let i = startIndex; i < this.notesByTime.length; i++) {
+			const instance = this.notesByTime[i];
+			const { mesh, instanceId, originalColor, note, channel } = instance;
+
+			if (note.time > visibleEndTime) {
+				if (instance.visible) {
+					instance.visible = false;
+					const matrix = new Matrix4();
+					mesh.getMatrixAt(instanceId, matrix);
+					const position = new Vector3();
+					const quaternion = new Quaternion();
+					matrix.decompose(position, quaternion, new Vector3());
+					matrix.compose(position, quaternion, new Vector3(0, 0, 0));
+					mesh.setMatrixAt(instanceId, matrix);
+					meshesToUpdate.add(mesh);
+				}
+				continue;
+			}
+
+			if (!instance.visible) {
+				instance.visible = true;
+				const key = this.piano.getKey(note.midi);
+				if (key) {
+					const keyPosition = key.position.clone();
+					const keyWidth = this.piano.isBlackKey(note.midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
+					const yOffset = channel * 0.001;
+					const position = new Vector3(keyPosition.x, keyPosition.y + NOTE_BAR_HEIGHT / 2 + 0.1 + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
+					const scale = new Vector3(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
+					const quaternion = new Quaternion();
+					const matrix = new Matrix4();
+					matrix.compose(position, quaternion, scale);
+					mesh.setMatrixAt(instanceId, matrix);
+					meshesToUpdate.add(mesh);
+				}
+			}
+
 			const noteKey = `${note.midi}-${note.time}`;
 			const isFinished = note.time + note.duration < elapsedTime;
 			const isActive = activeNoteKeys.has(noteKey);
@@ -132,6 +198,10 @@ export class NoteVisualizer {
 					mesh.instanceColor.needsUpdate = true;
 				}
 			}
+		}
+
+		meshesToUpdate.forEach((mesh) => {
+			mesh.instanceMatrix.needsUpdate = true;
 		});
 	}
 

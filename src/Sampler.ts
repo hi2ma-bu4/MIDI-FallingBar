@@ -83,16 +83,15 @@ export class Sampler {
 
 		// Schedule the note to stop
 		const releaseTime = 0.1; // 100ms fade out
-		const stopTime = this.audioContext.currentTime + duration - releaseTime;
-		if (stopTime > this.audioContext.currentTime) {
-			gainNode.gain.setValueAtTime(velocity, stopTime);
-			gainNode.gain.linearRampToValueAtTime(0, stopTime + releaseTime);
-			source.stop(stopTime + releaseTime);
+		const stopTime = this.audioContext.currentTime + duration;
+		if (duration > releaseTime) {
+			const rampStartTime = stopTime - releaseTime;
+			gainNode.gain.setValueAtTime(velocity, rampStartTime);
+			gainNode.gain.linearRampToValueAtTime(0, stopTime);
 		} else {
-			// If the note is too short, just stop it immediately
-			gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-			source.stop(this.audioContext.currentTime);
+			gainNode.gain.linearRampToValueAtTime(0, stopTime);
 		}
+		source.stop(stopTime);
 
 
 		source.onended = () => {
