@@ -1,5 +1,3 @@
-import { MATCH_NOTE_DURATION } from "./constants";
-
 export class Sampler {
 	private readonly audioContext: AudioContext;
 	private readonly samples: Map<string, AudioBuffer> = new Map();
@@ -40,7 +38,7 @@ export class Sampler {
 		}
 	}
 
-	public playNote(midi: number, velocity: number, duration: number): void {
+	public playNote(midi: number, velocity: number, duration: number, matchDuration: boolean): void {
 		if (this.samples.size === 0) {
 			console.warn(`No samples loaded for ${this.instrument}, cannot play note.`);
 			return;
@@ -83,7 +81,7 @@ export class Sampler {
 
 		this.activeSources.set(midi, { source, gainNode });
 
-		if (MATCH_NOTE_DURATION) {
+		if (matchDuration) {
 			// Schedule the note to stop
 			const releaseTime = 0.1; // 100ms fade out
 			const stopTime = this.audioContext.currentTime + duration;
