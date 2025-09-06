@@ -71,8 +71,13 @@ export class NoteVisualizer {
 				const keyWidth = this.piano.isBlackKey(midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 
 				const matrix = new Matrix4();
-				const yOffset = channel * 0.001;
-				const position = new Vector3(keyPosition.x, keyPosition.y + NOTE_BAR_HEIGHT / 2 + 0.1 + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
+				const yOffset = channel * 0.001; // To prevent z-fighting
+				// @ts-ignore
+				const keyHeight = key.geometry.parameters.height;
+				const keyTopY = keyPosition.y + keyHeight / 2;
+				const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
+
+				const position = new Vector3(keyPosition.x, barY + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
 				const scale = new Vector3(keyWidth * 0.9, 1, duration * TIME_SCALE);
 				const quaternion = new Quaternion();
 
@@ -167,7 +172,11 @@ export class NoteVisualizer {
 					const keyPosition = key.position.clone();
 					const keyWidth = this.piano.isBlackKey(note.midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 					const yOffset = channel * 0.001;
-					const position = new Vector3(keyPosition.x, keyPosition.y + NOTE_BAR_HEIGHT / 2 + 0.1 + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
+					// @ts-ignore
+					const keyHeight = key.geometry.parameters.height;
+					const keyTopY = keyPosition.y + keyHeight / 2;
+					const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
+					const position = new Vector3(keyPosition.x, barY + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
 					const scale = new Vector3(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
 					const quaternion = new Quaternion();
 					const matrix = new Matrix4();
