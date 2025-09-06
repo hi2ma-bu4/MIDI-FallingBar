@@ -33,8 +33,8 @@ export class Sampler {
 				}
 				const arrayBuffer = await response.arrayBuffer();
 				const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-				const startOffset = this._findAudioStart(audioBuffer);
-				const normalizationGain = this._calculateNormalizationGain(audioBuffer);
+				const { peak, normalizationGain } = this._calculatePeakAndGain(audioBuffer);
+				const startOffset = this._findAudioStart(audioBuffer, peak);
 				this.samples.set(note, { buffer: audioBuffer, startOffset, normalizationGain });
 			} catch (error) {
 				errNotes.push(note);
@@ -46,17 +46,24 @@ export class Sampler {
 		}
 	}
 
-	private _findAudioStart(buffer: AudioBuffer, threshold = 0.005): number {
+	private _findAudioStart(buffer: AudioBuffer, peak: number): number {
+		// Use a threshold relative to the peak volume to find the start
+		const threshold = peak * 0.01; // 1% of peak volume
+		if (threshold <= 0) return 0; // In case of silence
+
 		const data = buffer.getChannelData(0);
 		for (let i = 0; i < data.length; i++) {
 			if (Math.abs(data[i]) > threshold) {
-				return i / buffer.sampleRate;
+				// Backtrack a little to include the very beginning of the attack
+				const attackSamples = Math.floor(buffer.sampleRate * 0.005); // 5ms attack
+				const startIndex = Math.max(0, i - attackSamples);
+				return startIndex / buffer.sampleRate;
 			}
 		}
-		return 0; // No sound found, return 0
+		return 0; // No sound found
 	}
 
-	private _calculateNormalizationGain(buffer: AudioBuffer): number {
+	private _calculatePeakAndGain(buffer: AudioBuffer): { peak: number; normalizationGain: number } {
 		let peak = 0;
 		for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
 			const data = buffer.getChannelData(channel);
@@ -67,7 +74,8 @@ export class Sampler {
 				}
 			}
 		}
-		return peak > 0 ? 1 / peak : 1;
+		const normalizationGain = peak > 0 ? 1 / peak : 1;
+		return { peak, normalizationGain };
 	}
 
 	public playNote(midi: number, velocity: number, duration: number, matchDuration: boolean, destination: AudioNode): void {

@@ -27,6 +27,10 @@ export class Synth {
 		this.loadSampler("piano");
 	}
 
+	public get currentTime(): number {
+		return this.audioContext.currentTime;
+	}
+
 	private async loadSampler(instrument: string): Promise<void> {
 		if (this.samplers.has(instrument)) {
 			return;
