@@ -43,7 +43,13 @@ class MidiVisualizer {
 	private instrumentSettingsToggle!: HTMLHeadingElement;
 	private topDownViewToggle!: HTMLInputElement;
 	private matchNoteDurationToggle!: HTMLInputElement;
+	private pipBtn!: HTMLButtonElement;
 	private channelInstruments: Map<number, string> = new Map();
+	private channelInitialVolumes: Map<number, number> = new Map();
+
+	// PiP
+	private pipCanvas!: HTMLCanvasElement;
+	private pipVideo!: HTMLVideoElement;
 
 	// Controls state
 	private initialPinchDistance = 0;
@@ -88,8 +94,10 @@ class MidiVisualizer {
 		this.instrumentSelectorsContainer = document.getElementById("instrument-selectors-container") as HTMLDivElement;
 		this.instrumentSettingsToggle = document.getElementById("instrument-settings-toggle") as HTMLHeadingElement;
 		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
+		this.pipBtn = document.getElementById("pip-btn") as HTMLButtonElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
+		this.pipBtn.addEventListener("click", () => this.togglePiP());
 		this.instrumentSettingsToggle.addEventListener("click", () => {
 			this.instrumentSelectorsContainer.classList.toggle("collapsed");
 			const arrow = this.instrumentSettingsToggle.querySelector("span");
@@ -117,6 +125,7 @@ class MidiVisualizer {
 
 		document.addEventListener("visibilitychange", () => this.handleVisibilityChange());
 
+		this.initPiP();
 		this.initDragAndDrop();
 		this.initControls();
 	}
@@ -157,8 +166,25 @@ class MidiVisualizer {
 				this.synth.setInstrument(channel, selectedInstrument);
 			});
 
+			// Volume Slider
+			const volumeSlider = document.createElement("input");
+			volumeSlider.type = "range";
+			volumeSlider.id = `volume-ch-${channel}`;
+			volumeSlider.min = "0";
+			volumeSlider.max = "1";
+			volumeSlider.step = "0.01";
+			const initialVolume = this.channelInitialVolumes.get(channel) ?? 0.7;
+			volumeSlider.value = initialVolume.toString();
+			this.synth.setChannelVolume(channel, initialVolume); // Set initial synth volume
+			volumeSlider.addEventListener("input", (e) => {
+				const target = e.target as HTMLInputElement;
+				const volume = parseFloat(target.value);
+				this.synth.setChannelVolume(channel, volume);
+			});
+
 			channelDiv.appendChild(label);
 			channelDiv.appendChild(select);
+			channelDiv.appendChild(volumeSlider);
 			this.instrumentSelectorsContainer.appendChild(channelDiv);
 		});
 
@@ -301,6 +327,7 @@ class MidiVisualizer {
 			this.midiData = new Midi(arrayBuffer);
 			this.noteVisualizer.visualize(this.midiData);
 			this.channelInstruments.clear();
+			this.channelInitialVolumes.clear();
 
 			const channels = new Set<number>();
 			this.midiData.tracks.forEach((track) => {
@@ -309,6 +336,14 @@ class MidiVisualizer {
 					channels.add(track.channel);
 					const instrument = this.getInstrumentForTrack(track);
 					this.channelInstruments.set(track.channel, instrument);
+
+					// Find the last volume control change event (CC7) for this channel
+					const volumeChanges = track.controlChanges[7];
+					if (volumeChanges && volumeChanges.length > 0) {
+						// Get the value of the last volume event in the track
+						const lastVolumeEvent = volumeChanges[volumeChanges.length - 1];
+						this.channelInitialVolumes.set(track.channel, lastVolumeEvent.value);
+					}
 				}
 			});
 
@@ -396,8 +431,48 @@ class MidiVisualizer {
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 	}
 
+	private initPiP(): void {
+		// Create a canvas to draw something to show in the PiP window
+		this.pipCanvas = document.createElement("canvas");
+		this.pipCanvas.width = 256;
+		this.pipCanvas.height = 256;
+		const ctx = this.pipCanvas.getContext("2d")!;
+		ctx.fillStyle = "#2c3e50";
+		ctx.fillRect(0, 0, 256, 256);
+		ctx.fillStyle = "white";
+		ctx.font = "24px sans-serif";
+		ctx.textAlign = "center";
+		ctx.fillText("MIDI Visualizer", 128, 128);
+
+		// Create a video element from the canvas stream
+		// @ts-ignore
+		const stream = this.pipCanvas.captureStream();
+		this.pipVideo = document.createElement("video");
+		this.pipVideo.srcObject = stream;
+		this.pipVideo.muted = true; // Video must be muted to play in background
+		this.pipVideo.play();
+	}
+
+	private async togglePiP(): Promise<void> {
+		if (!document.pictureInPictureEnabled) {
+			console.error("Picture-in-Picture is not supported in this browser.");
+			return;
+		}
+
+		try {
+			if (document.pictureInPictureElement) {
+				await document.exitPictureInPicture();
+			} else {
+				await this.pipVideo.requestPictureInPicture();
+			}
+		} catch (error) {
+			console.error("Error toggling Picture-in-Picture:", error);
+		}
+	}
+
 	private handleVisibilityChange(): void {
-		if (document.hidden && this.isPlaying) {
+		// If the page is hidden, but it's because of PiP, don't pause.
+		if (document.hidden && !document.pictureInPictureElement && this.isPlaying) {
 			this.togglePlayback();
 		}
 	}

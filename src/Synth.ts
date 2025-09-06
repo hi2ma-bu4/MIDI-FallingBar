@@ -12,6 +12,7 @@ export class Synth {
 	private audioContext: AudioContext;
 	private activeOscillators: Map<number, ActiveOscillator> = new Map();
 	private mainGain: GainNode;
+	private channelGains: Map<number, GainNode> = new Map();
 
 	private samplers: Map<string, Sampler> = new Map();
 	private channelInstruments: Map<number, string> = new Map();
@@ -19,7 +20,7 @@ export class Synth {
 	constructor() {
 		this.audioContext = new window.AudioContext();
 		this.mainGain = this.audioContext.createGain();
-		this.mainGain.gain.value = 0.3;
+		this.mainGain.gain.value = 0.5; // Increased main gain a bit
 		this.mainGain.connect(this.audioContext.destination);
 
 		// Pre-load piano sampler
@@ -31,10 +32,26 @@ export class Synth {
 			return;
 		}
 		console.log(`Loading ${instrument}...`);
+		// The Sampler no longer takes an output node in constructor
 		const sampler = new Sampler(this.audioContext, instrument);
 		this.samplers.set(instrument, sampler);
 		await sampler.load();
 		console.log(`${instrument} loaded.`);
+	}
+
+	private getChannelGain(channel: number, initialVolume = 0.7): GainNode {
+		if (!this.channelGains.has(channel)) {
+			const gainNode = this.audioContext.createGain();
+			gainNode.gain.value = initialVolume;
+			gainNode.connect(this.mainGain);
+			this.channelGains.set(channel, gainNode);
+		}
+		return this.channelGains.get(channel)!;
+	}
+
+	public setChannelVolume(channel: number, volume: number): void {
+		const gainNode = this.getChannelGain(channel, volume);
+		gainNode.gain.value = volume;
 	}
 
 	public setInstrument(channel: number, instrument: string): void {
@@ -50,21 +67,22 @@ export class Synth {
 		}
 
 		const instrument = this.channelInstruments.get(channel) || "triangle";
+		const channelGain = this.getChannelGain(channel);
 
 		if (OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
-			this.playOscillatorNote(note, instrument as OscillatorType, matchDuration);
+			this.playOscillatorNote(note, instrument as OscillatorType, matchDuration, channelGain);
 		} else {
 			const sampler = this.samplers.get(instrument);
 			if (sampler) {
-				sampler.playNote(note.midi, note.velocity, note.duration, matchDuration);
+				sampler.playNote(note.midi, note.velocity, note.duration, matchDuration, channelGain);
 			} else {
 				console.warn(`Sampler for ${instrument} not found. Playing fallback sound.`);
-				this.playOscillatorNote(note, instrument as OscillatorType, matchDuration);
+				this.playOscillatorNote(note, instrument as OscillatorType, matchDuration, channelGain);
 			}
 		}
 	}
 
-	private playOscillatorNote(note: Note, instrument: OscillatorType, matchDuration: boolean): void {
+	private playOscillatorNote(note: Note, instrument: OscillatorType, matchDuration: boolean, destination: AudioNode): void {
 		if (this.activeOscillators.has(note.midi)) {
 			return;
 		}
@@ -80,7 +98,7 @@ export class Synth {
 		gainNode.gain.linearRampToValueAtTime(note.velocity, this.audioContext.currentTime + 0.05);
 
 		oscillator.connect(gainNode);
-		gainNode.connect(this.mainGain);
+		gainNode.connect(destination);
 		oscillator.start();
 
 		this.activeOscillators.set(note.midi, { oscillator, gainNode });

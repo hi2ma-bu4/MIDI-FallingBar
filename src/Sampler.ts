@@ -1,6 +1,11 @@
+interface Sample {
+	buffer: AudioBuffer;
+	startOffset: number;
+}
+
 export class Sampler {
 	private readonly audioContext: AudioContext;
-	private readonly samples: Map<string, AudioBuffer> = new Map();
+	private readonly samples: Map<string, Sample> = new Map();
 	private readonly instrument: string;
 	private readonly activeSources: Map<number, { source: AudioBufferSourceNode; gainNode: GainNode }> = new Map();
 	private readonly baseUrl = "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/";
@@ -27,7 +32,8 @@ export class Sampler {
 				}
 				const arrayBuffer = await response.arrayBuffer();
 				const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-				this.samples.set(note, audioBuffer);
+				const startOffset = this._findAudioStart(audioBuffer);
+				this.samples.set(note, { buffer: audioBuffer, startOffset });
 			} catch (error) {
 				errNotes.push(note);
 			}
@@ -38,7 +44,17 @@ export class Sampler {
 		}
 	}
 
-	public playNote(midi: number, velocity: number, duration: number, matchDuration: boolean): void {
+	private _findAudioStart(buffer: AudioBuffer, threshold = 0.005): number {
+		const data = buffer.getChannelData(0);
+		for (let i = 0; i < data.length; i++) {
+			if (Math.abs(data[i]) > threshold) {
+				return i / buffer.sampleRate;
+			}
+		}
+		return 0; // No sound found, return 0
+	}
+
+	public playNote(midi: number, velocity: number, duration: number, matchDuration: boolean, destination: AudioNode): void {
 		if (this.samples.size === 0) {
 			console.warn(`No samples loaded for ${this.instrument}, cannot play note.`);
 			return;
@@ -63,21 +79,21 @@ export class Sampler {
 			}
 		});
 
-		const sampleBuffer = this.samples.get(closestSampleName);
-		if (!sampleBuffer) return;
+		const sample = this.samples.get(closestSampleName);
+		if (!sample) return;
 
 		const source = this.audioContext.createBufferSource();
-		source.buffer = sampleBuffer;
+		source.buffer = sample.buffer;
 
 		const closestMidi = this.noteNameToMidi(closestSampleName);
 		source.detune.value = (midi - closestMidi) * 100;
 
 		const gainNode = this.audioContext.createGain();
 		gainNode.gain.setValueAtTime(velocity, this.audioContext.currentTime);
-		gainNode.connect(this.audioContext.destination);
+		gainNode.connect(destination);
 
 		source.connect(gainNode);
-		source.start(this.audioContext.currentTime);
+		source.start(this.audioContext.currentTime, sample.startOffset);
 
 		this.activeSources.set(midi, { source, gainNode });
 
