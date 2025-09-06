@@ -108,7 +108,7 @@ class MidiVisualizer {
 		this.topDownViewToggle.addEventListener("change", (e) => {
 			const isTopDown = (e.target as HTMLInputElement).checked;
 			if (isTopDown) {
-				this.camera.position.set(0, 20, 0);
+				this.camera.position.set(0, 50, 0);
 			} else {
 				this.camera.position.set(0, 8, 12);
 			}
@@ -215,6 +215,16 @@ class MidiVisualizer {
 
 		// Keyboard zoom
 		window.addEventListener("keydown", (event) => {
+			// Skip playing track
+			if (event.key === "ArrowRight") {
+				this.skipTime(10);
+				return;
+			}
+			if (event.key === "ArrowLeft") {
+				this.skipTime(-10);
+				return;
+			}
+
 			let zoomAmount = 0;
 			if (event.key === "-" || event.key === "_") {
 				zoomAmount = 0.5;
@@ -424,6 +434,40 @@ class MidiVisualizer {
 		for (let i = 0; i < this.notesToPlay.length; i++) {
 			const { note, channel } = this.notesToPlay[i];
 			// A note is active if the seek time is between its start and end times
+			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
+				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
+				color.addScalar(ACTIVE_BRIGHTNESS);
+				this.piano.pressKey(note.midi, color);
+				this.activeNotes.set(note.midi, note);
+			}
+		}
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
+	}
+
+	private skipTime(seconds: number): void {
+		if (!this.midiData) return;
+
+		const newElapsedTime = this.elapsedTime + seconds;
+		// Clamp the new time between 0 and the total duration
+		this.elapsedTime = Math.max(0, Math.min(this.midiData.duration, newElapsedTime));
+
+		if (this.isPlaying) {
+			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
+		}
+
+		// Stop all audio and visual feedback
+		this.synth.stopAllNotes();
+		this.piano.releaseAllKeys();
+		this.activeNotes.clear();
+		this.noteVisualizer.resetVisuals();
+
+		// Find the next note to be played
+		this.nextNoteIndex = this.notesToPlay.findIndex((playableNote) => playableNote.note.time >= this.elapsedTime);
+		if (this.nextNoteIndex === -1) this.nextNoteIndex = this.notesToPlay.length;
+
+		// Recover notes that should be active at the new time
+		for (let i = 0; i < this.notesToPlay.length; i++) {
+			const { note, channel } = this.notesToPlay[i];
 			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
