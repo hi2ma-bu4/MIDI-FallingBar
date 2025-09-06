@@ -2,7 +2,7 @@ import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from "three";
 
 // Constants for keyboard layout
 export const WHITE_KEY_WIDTH = 1.0;
-const WHITE_KEY_HEIGHT = 0.4;
+export const WHITE_KEY_HEIGHT = 0.4;
 const WHITE_KEY_DEPTH = 5.0;
 
 export const BLACK_KEY_WIDTH = 0.6;
@@ -19,7 +19,6 @@ export class Piano {
 	public readonly group: Group;
 	private readonly keys: Map<number, Mesh> = new Map();
 	private readonly originalKeyColors: Map<number, Color> = new Map();
-	private readonly activeKeyColor = new Color(0x3498db);
 
 	constructor() {
 		this.group = new Group();
@@ -35,13 +34,13 @@ export class Piano {
 		return [1, 3, 6, 8, 10].includes(noteInOctave);
 	}
 
-	public pressKey(midiNote: number): void {
+	public pressKey(midiNote: number, color: Color): void {
 		const key = this.getKey(midiNote);
 		if (key && key.material instanceof MeshStandardMaterial) {
 			if (!this.originalKeyColors.has(midiNote)) {
 				this.originalKeyColors.set(midiNote, key.material.color.clone());
 			}
-			key.material.color.set(this.activeKeyColor);
+			key.material.color.set(color);
 		}
 	}
 
@@ -51,6 +50,16 @@ export class Piano {
 		if (key && key.material instanceof MeshStandardMaterial && originalColor) {
 			key.material.color.set(originalColor);
 		}
+	}
+
+	public releaseAllKeys(): void {
+		this.originalKeyColors.forEach((color, midiNote) => {
+			const key = this.getKey(midiNote);
+			if (key && key.material instanceof MeshStandardMaterial) {
+				key.material.color.set(color);
+			}
+		});
+		this.originalKeyColors.clear();
 	}
 
 	private createKeys(): void {
