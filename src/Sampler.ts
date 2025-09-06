@@ -106,10 +106,10 @@ export class Sampler {
 		const activeSource = this.activeSources.get(midi);
 		if (activeSource) {
 			const { source, gainNode } = activeSource;
-			// A quick fade out to prevent clicks
-			const releaseTime = 0.05;
+			// A more natural release for when "match duration" is off
+			const releaseTime = 1.5; // seconds
 			gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-			gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + releaseTime);
+			gainNode.gain.setTargetAtTime(0, this.audioContext.currentTime, releaseTime / 4); // Exponential release
 			source.stop(this.audioContext.currentTime + releaseTime);
 			this.activeSources.delete(midi);
 		}
