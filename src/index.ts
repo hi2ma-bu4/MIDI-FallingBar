@@ -3,7 +3,6 @@ import type { Note } from "@tonejs/midi/dist/Note";
 import { AmbientLight, Clock, Color, DirectionalLight, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { NoteVisualizer } from "./NoteVisualizer";
 import { Piano } from "./Piano";
-import { Sampler } from "./Sampler";
 import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
 import { instruments } from "./instruments";
@@ -125,7 +124,7 @@ class MidiVisualizer {
 	private populateChannelInstrumentSelectors(channels: number[]): void {
 		this.instrumentSelectorsContainer.innerHTML = ""; // Clear previous selectors
 
-		channels.forEach(channel => {
+		channels.forEach((channel) => {
 			const channelDiv = document.createElement("div");
 			channelDiv.className = "channel-instrument-selector";
 
@@ -286,7 +285,7 @@ class MidiVisualizer {
 		const instrumentName = track.instrument.name.toLowerCase();
 		// @ts-ignore
 		const mappedInstrument = midiInstrumentMap[instrumentName];
-		if (mappedInstrument && instruments.some(i => i.value === mappedInstrument)) {
+		if (mappedInstrument && instruments.some((i) => i.value === mappedInstrument)) {
 			return mappedInstrument;
 		}
 		// Fallback for similar instruments
@@ -304,8 +303,9 @@ class MidiVisualizer {
 			this.channelInstruments.clear();
 
 			const channels = new Set<number>();
-			this.midiData.tracks.forEach(track => {
-				if (track.channel !== 9) { // Ignore percussion
+			this.midiData.tracks.forEach((track) => {
+				if (track.channel !== 9) {
+					// Ignore percussion
 					channels.add(track.channel);
 					const instrument = this.getInstrumentForTrack(track);
 					this.channelInstruments.set(track.channel, instrument);
@@ -419,7 +419,7 @@ class MidiVisualizer {
 
 		// Update note statistics
 		const totalNotes = this.notesToPlay.length;
-		const playedNotes = this.notesToPlay.filter(p => p.note.time + p.note.duration < this.elapsedTime).length;
+		const playedNotes = this.notesToPlay.filter((p) => p.note.time + p.note.duration < this.elapsedTime).length;
 		const percentage = totalNotes > 0 ? ((playedNotes / totalNotes) * 100).toFixed(0) : 0;
 		this.statsDisplay.textContent = `Notes: ${playedNotes} / ${totalNotes} (${percentage}%)`;
 	}

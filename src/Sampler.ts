@@ -95,7 +95,6 @@ export class Sampler {
 			source.stop(stopTime);
 		}
 
-
 		source.onended = () => {
 			// Clean up the active source map when the note finishes playing
 			this.activeSources.delete(midi);
