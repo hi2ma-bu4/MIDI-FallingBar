@@ -1,0 +1,3 @@
+[merge "theirs"]
+    name = Always use theirs version
+    driver = true

@@ -1,0 +1,2 @@
+*.js.map    merge=theirs
+**/dist/**  merge=theirs
