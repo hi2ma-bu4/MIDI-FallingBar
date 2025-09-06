@@ -48,7 +48,7 @@ export class Sampler {
 
 	private _findAudioStart(buffer: AudioBuffer, peak: number): number {
 		// Use a threshold relative to the peak volume to find the start
-		const threshold = peak * 0.01; // 1% of peak volume
+		const threshold = peak * 0.05; // 1% of peak volume
 		if (threshold <= 0) return 0; // In case of silence
 
 		const data = buffer.getChannelData(0);

@@ -108,7 +108,7 @@ class MidiVisualizer {
 		this.topDownViewToggle.addEventListener("change", (e) => {
 			const isTopDown = (e.target as HTMLInputElement).checked;
 			if (isTopDown) {
-				this.camera.position.set(0, 50, 0);
+				this.camera.position.set(0, 24, 0);
 			} else {
 				this.camera.position.set(0, 8, 12);
 			}
