@@ -1,6 +1,6 @@
 import { Midi } from "@tonejs/midi";
 import type { Note } from "@tonejs/midi/dist/Note";
-import { AmbientLight, Clock, Color, DirectionalLight, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { AmbientLight, Color, DirectionalLight, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { ACTIVE_BRIGHTNESS, CHANNEL_COLORS, NoteVisualizer } from "./NoteVisualizer";
 import { Piano } from "./Piano";
 import { Synth } from "./Synth";
@@ -23,10 +23,9 @@ class MidiVisualizer {
 	private synth: Synth;
 
 	// Playback state
-	private clock: Clock;
 	private isPlaying = false;
 	private midiData: Midi | null = null;
-	private playbackStartTime = 0;
+	private audioContextStartTime = 0;
 	private elapsedTime = 0;
 	private notesToPlay: PlayableNote[] = [];
 	private nextNoteIndex = 0;
@@ -60,7 +59,6 @@ class MidiVisualizer {
 		this.piano = new Piano();
 		this.noteVisualizer = new NoteVisualizer(this.scene, this.piano);
 		this.synth = new Synth();
-		this.clock = new Clock();
 
 		this.init();
 		this.animate();
@@ -373,7 +371,7 @@ class MidiVisualizer {
 	private resetPlayback(): void {
 		this.isPlaying = false;
 		this.elapsedTime = 0;
-		this.playbackStartTime = 0;
+		this.audioContextStartTime = 0;
 		this.nextNoteIndex = 0;
 		this.noteVisualizer.noteObjects.position.z = 0;
 		this.playPauseBtn.textContent = "Play";
@@ -392,7 +390,7 @@ class MidiVisualizer {
 		this.synth.resumeContext();
 		this.isPlaying = !this.isPlaying;
 		if (this.isPlaying) {
-			this.playbackStartTime = this.clock.getElapsedTime() - this.elapsedTime;
+			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
 			this.playPauseBtn.textContent = "Pause";
 			this.statsDisplay.style.display = "block";
 		} else {
@@ -409,7 +407,7 @@ class MidiVisualizer {
 		const percentage = clickX / width;
 		this.elapsedTime = this.midiData.duration * percentage;
 		if (this.isPlaying) {
-			this.playbackStartTime = this.clock.getElapsedTime() - this.elapsedTime;
+			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
 		}
 
 		// Stop all audio and visual feedback
@@ -510,7 +508,7 @@ class MidiVisualizer {
 	private updatePlayback(): void {
 		if (!this.isPlaying || !this.midiData) return;
 
-		this.elapsedTime = this.clock.getElapsedTime() - this.playbackStartTime;
+		this.elapsedTime = this.synth.currentTime - this.audioContextStartTime;
 		if (this.elapsedTime >= this.midiData.duration) {
 			this.elapsedTime = this.midiData.duration;
 			this.resetPlayback();
