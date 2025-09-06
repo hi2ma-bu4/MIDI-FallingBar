@@ -1,6 +1,7 @@
 interface Sample {
 	buffer: AudioBuffer;
 	startOffset: number;
+	normalizationGain: number;
 }
 
 export class Sampler {
@@ -33,7 +34,8 @@ export class Sampler {
 				const arrayBuffer = await response.arrayBuffer();
 				const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
 				const startOffset = this._findAudioStart(audioBuffer);
-				this.samples.set(note, { buffer: audioBuffer, startOffset });
+				const normalizationGain = this._calculateNormalizationGain(audioBuffer);
+				this.samples.set(note, { buffer: audioBuffer, startOffset, normalizationGain });
 			} catch (error) {
 				errNotes.push(note);
 			}
@@ -52,6 +54,20 @@ export class Sampler {
 			}
 		}
 		return 0; // No sound found, return 0
+	}
+
+	private _calculateNormalizationGain(buffer: AudioBuffer): number {
+		let peak = 0;
+		for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+			const data = buffer.getChannelData(channel);
+			for (let i = 0; i < data.length; i++) {
+				const value = Math.abs(data[i]);
+				if (value > peak) {
+					peak = value;
+				}
+			}
+		}
+		return peak > 0 ? 1 / peak : 1;
 	}
 
 	public playNote(midi: number, velocity: number, duration: number, matchDuration: boolean, destination: AudioNode): void {
@@ -89,7 +105,8 @@ export class Sampler {
 		source.detune.value = (midi - closestMidi) * 100;
 
 		const gainNode = this.audioContext.createGain();
-		gainNode.gain.setValueAtTime(velocity, this.audioContext.currentTime);
+		const finalGain = velocity * sample.normalizationGain;
+		gainNode.gain.setValueAtTime(finalGain, this.audioContext.currentTime);
 		gainNode.connect(destination);
 
 		source.connect(gainNode);
@@ -103,7 +120,7 @@ export class Sampler {
 			const stopTime = this.audioContext.currentTime + duration;
 			if (duration > releaseTime) {
 				const rampStartTime = stopTime - releaseTime;
-				gainNode.gain.setValueAtTime(velocity, rampStartTime);
+				gainNode.gain.setValueAtTime(finalGain, rampStartTime);
 				gainNode.gain.linearRampToValueAtTime(0, stopTime);
 			} else {
 				gainNode.gain.linearRampToValueAtTime(0, stopTime);

@@ -1,7 +1,7 @@
 import { Midi } from "@tonejs/midi";
 import type { Note } from "@tonejs/midi/dist/Note";
 import { AmbientLight, Clock, Color, DirectionalLight, PerspectiveCamera, Scene, WebGLRenderer } from "three";
-import { NoteVisualizer } from "./NoteVisualizer";
+import { ACTIVE_BRIGHTNESS, CHANNEL_COLORS, NoteVisualizer } from "./NoteVisualizer";
 import { Piano } from "./Piano";
 import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
@@ -48,7 +48,6 @@ class MidiVisualizer {
 	private channelInitialVolumes: Map<number, number> = new Map();
 
 	// PiP
-	private pipCanvas!: HTMLCanvasElement;
 	private pipVideo!: HTMLVideoElement;
 
 	// Controls state
@@ -140,6 +139,10 @@ class MidiVisualizer {
 			const label = document.createElement("label");
 			label.textContent = `Ch ${channel + 1}:`;
 			label.htmlFor = `instrument-select-ch-${channel}`;
+			const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
+			label.style.color = color.getStyle();
+			// Make color slightly less bright for better readability on a light background if needed
+			// label.style.textShadow = "0 0 2px #000, 0 0 2px #000"; // Example shadow for readability
 
 			const select = document.createElement("select");
 			select.id = `instrument-select-ch-${channel}`;
@@ -379,7 +382,7 @@ class MidiVisualizer {
 		}
 
 		this.synth.stopAllNotes();
-		this.activeNotes.forEach((note) => this.piano.releaseKey(note.midi));
+		this.piano.releaseAllKeys();
 		this.activeNotes.clear();
 		this.noteVisualizer.resetVisuals();
 	}
@@ -411,7 +414,7 @@ class MidiVisualizer {
 
 		// Stop all audio and visual feedback
 		this.synth.stopAllNotes();
-		this.activeNotes.forEach((note) => this.piano.releaseKey(note.midi));
+		this.piano.releaseAllKeys();
 		this.activeNotes.clear();
 		this.noteVisualizer.resetVisuals();
 
@@ -421,10 +424,12 @@ class MidiVisualizer {
 
 		// Recover notes that should be active at the seek time
 		for (let i = 0; i < this.notesToPlay.length; i++) {
-			const { note } = this.notesToPlay[i];
+			const { note, channel } = this.notesToPlay[i];
 			// A note is active if the seek time is between its start and end times
 			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
-				this.piano.pressKey(note.midi);
+				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
+				color.addScalar(ACTIVE_BRIGHTNESS);
+				this.piano.pressKey(note.midi, color);
 				this.activeNotes.set(note.midi, note);
 			}
 		}
@@ -432,21 +437,9 @@ class MidiVisualizer {
 	}
 
 	private initPiP(): void {
-		// Create a canvas to draw something to show in the PiP window
-		this.pipCanvas = document.createElement("canvas");
-		this.pipCanvas.width = 256;
-		this.pipCanvas.height = 256;
-		const ctx = this.pipCanvas.getContext("2d")!;
-		ctx.fillStyle = "#2c3e50";
-		ctx.fillRect(0, 0, 256, 256);
-		ctx.fillStyle = "white";
-		ctx.font = "24px sans-serif";
-		ctx.textAlign = "center";
-		ctx.fillText("MIDI Visualizer", 128, 128);
-
-		// Create a video element from the canvas stream
+		// Create a video element from the main canvas's stream
 		// @ts-ignore
-		const stream = this.pipCanvas.captureStream();
+		const stream = this.renderer.domElement.captureStream(60); // 60 fps
 		this.pipVideo = document.createElement("video");
 		this.pipVideo.srcObject = stream;
 		this.pipVideo.muted = true; // Video must be muted to play in background
@@ -455,7 +448,7 @@ class MidiVisualizer {
 
 	private async togglePiP(): Promise<void> {
 		if (!document.pictureInPictureEnabled) {
-			console.error("Picture-in-Picture is not supported in this browser.");
+			alert("Picture-in-Picture is not supported in this browser, or is disabled.");
 			return;
 		}
 
@@ -463,10 +456,19 @@ class MidiVisualizer {
 			if (document.pictureInPictureElement) {
 				await document.exitPictureInPicture();
 			} else {
+				if (this.pipVideo.readyState === 0) {
+					// Video is not ready, maybe user needs to interact first.
+					await this.pipVideo.play();
+				}
 				await this.pipVideo.requestPictureInPicture();
 			}
 		} catch (error) {
 			console.error("Error toggling Picture-in-Picture:", error);
+			if (error instanceof Error) {
+				alert(`Error entering Picture-in-Picture mode: ${error.message}`);
+			} else {
+				alert("An unknown error occurred while entering Picture-in-Picture mode.");
+			}
 		}
 	}
 
@@ -520,7 +522,11 @@ class MidiVisualizer {
 			const { note, channel } = this.notesToPlay[this.nextNoteIndex];
 			const matchDuration = this.matchNoteDurationToggle.checked;
 			this.synth.playNote(note, channel, matchDuration);
-			this.piano.pressKey(note.midi);
+
+			const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
+			color.addScalar(ACTIVE_BRIGHTNESS);
+			this.piano.pressKey(note.midi, color);
+
 			this.activeNotes.set(note.midi, note);
 			this.nextNoteIndex++;
 		}
