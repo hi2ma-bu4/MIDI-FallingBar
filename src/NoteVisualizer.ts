@@ -1,15 +1,15 @@
 import type { Midi } from "@tonejs/midi";
 import type { Note } from "@tonejs/midi/dist/Note";
 import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Scene, Vector3 } from "three";
-import { BLACK_KEY_WIDTH, Piano, WHITE_KEY_WIDTH } from "./Piano";
+import { BLACK_KEY_WIDTH, Piano, WHITE_KEY_HEIGHT, WHITE_KEY_WIDTH } from "./Piano";
 import { TIME_SCALE } from "./constants";
 
 const NOTE_BAR_HEIGHT = 0.2;
-const ACTIVE_BRIGHTNESS = 0.5;
+export const ACTIVE_BRIGHTNESS = 0.5;
 const PLAYED_DARKEN_FACTOR = 0.4;
 
 // A simple color palette for different MIDI channels
-const CHANNEL_COLORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffffff, 0xff8800, 0x00ff88, 0x8800ff, 0x88ff00, 0x0088ff, 0xff0088, 0x888888, 0xcc0000, 0x00cc00];
+export const CHANNEL_COLORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffffff, 0xff8800, 0x00ff88, 0x8800ff, 0x88ff00, 0x0088ff, 0xff0088, 0x888888, 0xcc0000, 0x00cc00];
 
 interface NoteInstance {
 	mesh: InstancedMesh;
@@ -72,9 +72,8 @@ export class NoteVisualizer {
 
 				const matrix = new Matrix4();
 				const yOffset = channel * 0.001; // To prevent z-fighting
-				// @ts-ignore
-				const keyHeight = key.geometry.parameters.height;
-				const keyTopY = keyPosition.y + keyHeight / 2;
+				// Use the white key height as a reference for all notes to keep them on the same plane
+				const keyTopY = WHITE_KEY_HEIGHT / 2;
 				const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
 
 				const position = new Vector3(keyPosition.x, barY + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
@@ -172,9 +171,8 @@ export class NoteVisualizer {
 					const keyPosition = key.position.clone();
 					const keyWidth = this.piano.isBlackKey(note.midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 					const yOffset = channel * 0.001;
-					// @ts-ignore
-					const keyHeight = key.geometry.parameters.height;
-					const keyTopY = keyPosition.y + keyHeight / 2;
+					// Use the white key height as a reference for all notes to keep them on the same plane
+					const keyTopY = WHITE_KEY_HEIGHT / 2;
 					const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
 					const position = new Vector3(keyPosition.x, barY + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
 					const scale = new Vector3(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
