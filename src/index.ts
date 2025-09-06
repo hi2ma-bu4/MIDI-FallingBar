@@ -7,6 +7,7 @@ import { Sampler } from "./Sampler";
 import { Synth } from "./Synth";
 import { TIME_SCALE } from "./constants";
 import { instruments } from "./instruments";
+import { midiInstrumentMap } from "./midiInstruments";
 import "./style.css";
 
 interface PlayableNote {
@@ -40,6 +41,7 @@ class MidiVisualizer {
 	private uiContainer!: HTMLDivElement;
 	private statsDisplay!: HTMLDivElement;
 	private instrumentSelectorsContainer!: HTMLDivElement;
+	private instrumentSettingsToggle!: HTMLHeadingElement;
 	private topDownViewToggle!: HTMLInputElement;
 	private matchNoteDurationToggle!: HTMLInputElement;
 	private channelInstruments: Map<number, string> = new Map();
@@ -85,9 +87,17 @@ class MidiVisualizer {
 		this.timeDisplay = document.getElementById("time-display") as HTMLDivElement;
 		this.statsDisplay = document.getElementById("stats-display") as HTMLDivElement;
 		this.instrumentSelectorsContainer = document.getElementById("instrument-selectors-container") as HTMLDivElement;
+		this.instrumentSettingsToggle = document.getElementById("instrument-settings-toggle") as HTMLHeadingElement;
 		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
+		this.instrumentSettingsToggle.addEventListener("click", () => {
+			this.instrumentSelectorsContainer.classList.toggle("collapsed");
+			const arrow = this.instrumentSettingsToggle.querySelector("span");
+			if (arrow) {
+				arrow.innerHTML = this.instrumentSelectorsContainer.classList.contains("collapsed") ? "&#x25BC;" : "&#x25B2;";
+			}
+		});
 		this.progressBar.addEventListener("click", (e) => this.handleSeek(e));
 
 		this.topDownViewToggle = document.getElementById("top-down-view-toggle") as HTMLInputElement;
@@ -134,11 +144,12 @@ class MidiVisualizer {
 				select.appendChild(option);
 			});
 
-			// Set default instrument
-			const defaultInstrument = instruments[0].value;
-			select.value = defaultInstrument;
-			this.synth.setInstrument(channel, defaultInstrument);
-			this.channelInstruments.set(channel, defaultInstrument);
+			// Set instrument from MIDI data, or default to piano
+			const initialInstrument = this.channelInstruments.get(channel) || "piano";
+			select.value = initialInstrument;
+			this.synth.setInstrument(channel, initialInstrument);
+			// Ensure the map is updated in case a default was used
+			this.channelInstruments.set(channel, initialInstrument);
 
 			select.addEventListener("change", (e) => {
 				const target = e.target as HTMLSelectElement;
@@ -151,6 +162,13 @@ class MidiVisualizer {
 			channelDiv.appendChild(select);
 			this.instrumentSelectorsContainer.appendChild(channelDiv);
 		});
+
+		// Collapse by default
+		this.instrumentSelectorsContainer.classList.add("collapsed");
+		const arrow = this.instrumentSettingsToggle.querySelector("span");
+		if (arrow) {
+			arrow.innerHTML = "&#x25BC;";
+		}
 	}
 
 	private initControls(): void {
@@ -264,6 +282,21 @@ class MidiVisualizer {
 		reader.readAsArrayBuffer(file);
 	}
 
+	private getInstrumentForTrack(track: Midi["tracks"][0]): string {
+		const instrumentName = track.instrument.name.toLowerCase();
+		// @ts-ignore
+		const mappedInstrument = midiInstrumentMap[instrumentName];
+		if (mappedInstrument && instruments.some(i => i.value === mappedInstrument)) {
+			return mappedInstrument;
+		}
+		// Fallback for similar instruments
+		if (instrumentName.includes("piano")) return "piano";
+		if (instrumentName.includes("guitar")) return "guitar-acoustic";
+		if (instrumentName.includes("bass")) return "bass-electric";
+		if (instrumentName.includes("synth")) return "sawtooth";
+		return "piano"; // Default fallback
+	}
+
 	private async loadMidi(arrayBuffer: ArrayBuffer): Promise<void> {
 		try {
 			this.midiData = new Midi(arrayBuffer);
@@ -271,11 +304,18 @@ class MidiVisualizer {
 			this.channelInstruments.clear();
 
 			const channels = new Set<number>();
+			this.midiData.tracks.forEach(track => {
+				if (track.channel !== 9) { // Ignore percussion
+					channels.add(track.channel);
+					const instrument = this.getInstrumentForTrack(track);
+					this.channelInstruments.set(track.channel, instrument);
+				}
+			});
+
 			this.notesToPlay = this.midiData.tracks
 				.flatMap((track) => {
 					// Ignore percussion track for now
 					if (track.channel === 9) return [];
-					channels.add(track.channel);
 					return track.notes.map((note) => ({ note, channel: track.channel }));
 				})
 				.sort((a, b) => a.note.time - b.note.time);
@@ -316,6 +356,7 @@ class MidiVisualizer {
 		if (this.isPlaying) {
 			this.playbackStartTime = this.clock.getElapsedTime() - this.elapsedTime;
 			this.playPauseBtn.textContent = "Pause";
+			this.statsDisplay.style.display = "block";
 		} else {
 			this.synth.stopAllNotes();
 			this.playPauseBtn.textContent = "Play";
@@ -412,7 +453,11 @@ class MidiVisualizer {
 		// Notes OFF
 		this.activeNotes.forEach((note, midi) => {
 			if (note.time + note.duration <= this.elapsedTime) {
-				this.synth.stopNote(midi);
+				// If match duration is OFF, we manually stop the note.
+				// If it's ON, the synth/sampler is responsible for stopping it at the right time.
+				if (!this.matchNoteDurationToggle.checked) {
+					this.synth.stopNote(midi);
+				}
 				this.piano.releaseKey(midi);
 				this.activeNotes.delete(midi);
 			}

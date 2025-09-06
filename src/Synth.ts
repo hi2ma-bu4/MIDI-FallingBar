@@ -52,19 +52,19 @@ export class Synth {
 		const instrument = this.channelInstruments.get(channel) || "triangle";
 
 		if (OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
-			this.playOscillatorNote(note, instrument as OscillatorType);
+			this.playOscillatorNote(note, instrument as OscillatorType, matchDuration);
 		} else {
 			const sampler = this.samplers.get(instrument);
 			if (sampler) {
 				sampler.playNote(note.midi, note.velocity, note.duration, matchDuration);
 			} else {
 				console.warn(`Sampler for ${instrument} not found. Playing fallback sound.`);
-				this.playOscillatorNote(note, instrument as OscillatorType);
+				this.playOscillatorNote(note, instrument as OscillatorType, matchDuration);
 			}
 		}
 	}
 
-	private playOscillatorNote(note: Note, instrument: OscillatorType): void {
+	private playOscillatorNote(note: Note, instrument: OscillatorType, matchDuration: boolean): void {
 		if (this.activeOscillators.has(note.midi)) {
 			return;
 		}
@@ -84,6 +84,13 @@ export class Synth {
 		oscillator.start();
 
 		this.activeOscillators.set(note.midi, { oscillator, gainNode });
+
+		if (matchDuration) {
+			const stopTime = this.audioContext.currentTime + note.duration;
+			gainNode.gain.setValueAtTime(gainNode.gain.value, stopTime - 0.1);
+			gainNode.gain.linearRampToValueAtTime(0, stopTime);
+			oscillator.stop(stopTime);
+		}
 	}
 
 	public stopNote(midiNote: number): void {
