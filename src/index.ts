@@ -38,6 +38,7 @@ class MidiVisualizer {
 	private timeDisplay!: HTMLDivElement;
 	private uiContainer!: HTMLDivElement;
 	private statsDisplay!: HTMLDivElement;
+	private fpsDisplay!: HTMLDivElement;
 	private instrumentSelectorsContainer!: HTMLDivElement;
 	private instrumentSettingsToggle!: HTMLHeadingElement;
 	private topDownViewToggle!: HTMLInputElement;
@@ -53,6 +54,40 @@ class MidiVisualizer {
 	// Controls state
 	private initialPinchDistance = 0;
 
+	// FPS Counter
+	private frameCount = 0;
+	private lastFPSTime = 0;
+
+	private getInitialLightweightMode(): boolean {
+		try {
+			const canvas = document.createElement("canvas");
+			const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+			if (gl) {
+				const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+				if (debugInfo) {
+					const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+					if (renderer.toLowerCase().includes("intel")) {
+						console.log("Intel GPU detected, enabling lightweight mode by default.");
+						return true;
+					}
+				}
+			}
+		} catch (e) {
+			console.error("Could not detect GPU info, defaulting to non-lightweight mode.", e);
+		}
+		// Check for power saving mode via battery API
+		// This is an async operation, so it's a bit tricky to use for initial sync setup.
+		// For now, we rely on the GPU check. A more advanced implementation could
+		// update the setting once the battery promise resolves.
+		// navigator.getBattery().then(battery => {
+		//   if (battery.charging === false && battery.level < 0.5) { // Example condition
+		//     // logic to enable lightweight mode
+		//   }
+		// });
+
+		return false; // Default to false if detection fails or not Intel
+	}
+
 	constructor() {
 		this.scene = new Scene();
 		this.camera = new PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -61,12 +96,17 @@ class MidiVisualizer {
 		this.synth = new Synth();
 
 		this.init();
-		this.animate();
+		this.lastFPSTime = performance.now();
+		this.animate(this.lastFPSTime);
 	}
 
 	private init(): void {
 		this.scene.background = new Color(0x2c3e50);
-		const isLightweight = (document.getElementById("lightweight-mode-toggle") as HTMLInputElement).checked;
+
+		// Set lightweight mode based on GPU detection before initializing the renderer
+		this.lightweightModeToggle = document.getElementById("lightweight-mode-toggle") as HTMLInputElement;
+		this.lightweightModeToggle.checked = this.getInitialLightweightMode();
+		const isLightweight = this.lightweightModeToggle.checked;
 
 		this.renderer = new WebGLRenderer({ antialias: !isLightweight });
 		this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -91,16 +131,17 @@ class MidiVisualizer {
 		this.progressElement = document.getElementById("progress") as HTMLDivElement;
 		this.timeDisplay = document.getElementById("time-display") as HTMLDivElement;
 		this.statsDisplay = document.getElementById("stats-display") as HTMLDivElement;
+		this.fpsDisplay = document.getElementById("fps-display") as HTMLDivElement;
 		this.instrumentSelectorsContainer = document.getElementById("instrument-selectors-container") as HTMLDivElement;
 		this.instrumentSettingsToggle = document.getElementById("instrument-settings-toggle") as HTMLHeadingElement;
 		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
-		this.lightweightModeToggle = document.getElementById("lightweight-mode-toggle") as HTMLInputElement;
 		this.pipBtn = document.getElementById("pip-btn") as HTMLButtonElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.pipBtn.addEventListener("click", () => this.togglePiP());
-		this.lightweightModeToggle.addEventListener("change", () => {
-			alert("Settings will be applied after reloading the page.");
+		this.lightweightModeToggle.addEventListener("change", (e) => {
+			const isLightweight = (e.target as HTMLInputElement).checked;
+			this.recreateRenderer(isLightweight);
 		});
 		this.instrumentSettingsToggle.addEventListener("click", () => {
 			this.instrumentSelectorsContainer.classList.toggle("collapsed");
@@ -445,7 +486,7 @@ class MidiVisualizer {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(`${note.midi}-${note.time}`, note);
+				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -479,7 +520,7 @@ class MidiVisualizer {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(`${note.midi}-${note.time}`, note);
+				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -519,6 +560,23 @@ class MidiVisualizer {
 				alert("An unknown error occurred while entering Picture-in-Picture mode.");
 			}
 		}
+	}
+
+	private recreateRenderer(isLightweight: boolean): void {
+		// Clean up the old renderer
+		if (this.renderer) {
+			this.renderer.dispose();
+			this.renderer.domElement.parentElement?.removeChild(this.renderer.domElement);
+		}
+
+		// Create a new renderer with the updated settings
+		this.renderer = new WebGLRenderer({ antialias: !isLightweight });
+		this.renderer.setSize(window.innerWidth, window.innerHeight);
+		this.renderer.setPixelRatio(isLightweight ? 1 : window.devicePixelRatio);
+		document.getElementById("webgl-container")?.appendChild(this.renderer.domElement);
+
+		// Re-initialize components that depend on the renderer's canvas
+		this.initPiP();
 	}
 
 	private handleVisibilityChange(): void {
@@ -576,7 +634,7 @@ class MidiVisualizer {
 			color.addScalar(ACTIVE_BRIGHTNESS);
 			this.piano.pressKey(note.midi, color);
 
-			this.activeNotes.set(`${note.midi}-${note.time}`, note);
+			this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
 			this.nextNoteIndex++;
 		}
 
@@ -597,8 +655,18 @@ class MidiVisualizer {
 		this.updateUI();
 	}
 
-	private animate(): void {
+	private updateFPS(now: number): void {
+		this.frameCount++;
+		if (now >= this.lastFPSTime + 1000) {
+			this.fpsDisplay.textContent = `FPS: ${this.frameCount}`;
+			this.frameCount = 0;
+			this.lastFPSTime = now;
+		}
+	}
+
+	private animate(now: number): void {
 		requestAnimationFrame(this.animate.bind(this));
+		this.updateFPS(now);
 		this.updatePlayback();
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 		this.renderer.render(this.scene, this.camera);

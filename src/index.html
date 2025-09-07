@@ -6,6 +6,7 @@
     <title>MIDI Visualizer</title>
 </head>
 <body>
+    <div id="fps-display"></div>
     <div id="file-input-container">
         <input type="file" id="midi-file" accept=".mid,.midi">
     </div>
@@ -31,7 +32,7 @@
             <label for="match-note-duration-toggle">Match Note Duration</label>
         </div>
         <div id="performance-controls">
-            <input type="checkbox" id="lightweight-mode-toggle" checked>
+            <input type="checkbox" id="lightweight-mode-toggle">
             <label for="lightweight-mode-toggle">Lightweight Mode</label>
         </div>
         <button id="pip-btn">PiP</button>
