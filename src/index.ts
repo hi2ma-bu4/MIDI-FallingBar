@@ -231,6 +231,12 @@ class MidiVisualizer {
 				const target = e.target as HTMLInputElement;
 				const volume = parseFloat(target.value);
 				this.synth.setChannelVolume(channel, volume);
+				// Added this
+				if (volume === 0) {
+					this.noteVisualizer.setChannelOpacity(channel, 0.05);
+				} else {
+					this.noteVisualizer.setChannelOpacity(channel, 0.9);
+				}
 			});
 
 			channelDiv.appendChild(label);

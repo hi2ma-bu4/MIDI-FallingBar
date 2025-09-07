@@ -238,4 +238,12 @@ export class NoteVisualizer {
 		this.noteMap.clear();
 		this.notesByTime = [];
 	}
+
+	public setChannelOpacity(channel: number, opacity: number): void {
+		const meshName = `channel_${channel}`;
+		const mesh = this.noteObjects.getObjectByName(meshName) as InstancedMesh;
+		if (mesh && mesh.material instanceof MeshStandardMaterial) {
+			mesh.material.opacity = opacity;
+		}
+	}
 }
