@@ -134,6 +134,11 @@ export class Sampler {
 				gainNode.gain.linearRampToValueAtTime(0, stopTime);
 			}
 			source.stop(stopTime);
+		} else {
+			const releaseTime = 0.1;
+			const stopTime = this.audioContext.currentTime + duration + releaseTime;
+			gainNode.gain.setValueAtTime(finalGain, stopTime);
+			source.stop(stopTime);
 		}
 
 		source.onended = () => {
