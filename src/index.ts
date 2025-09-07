@@ -61,10 +61,12 @@ class MidiVisualizer {
 	private getInitialLightweightMode(): boolean {
 		try {
 			const canvas = document.createElement("canvas");
-			const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+			const gl = canvas.getContext("experimental-webgl") || canvas.getContext("webgl");
 			if (gl) {
+				// @ts-ignore
 				const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
 				if (debugInfo) {
+					// @ts-ignore
 					const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
 					if (renderer.toLowerCase().includes("intel")) {
 						console.log("Intel GPU detected, enabling lightweight mode by default.");
