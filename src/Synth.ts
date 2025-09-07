@@ -130,11 +130,6 @@ export class Synth {
 			activeOsc.oscillator.stop(this.audioContext.currentTime + releaseTime);
 			this.activeOscillators.delete(midiNote);
 		}
-
-		// Also stop the note if it's a sampler
-		this.samplers.forEach((sampler) => {
-			sampler.stopNote(midiNote);
-		});
 	}
 
 	public stopAllNotes(): void {
