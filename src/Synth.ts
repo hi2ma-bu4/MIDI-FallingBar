@@ -70,8 +70,13 @@ export class Synth {
 			this.audioContext.resume();
 		}
 
-		const instrument = this.channelInstruments.get(channel) || "triangle";
 		const channelGain = this.getChannelGain(channel);
+		// If channel volume is 0, skip playing the note
+		if (channelGain.gain.value === 0) {
+			return;
+		}
+
+		const instrument = this.channelInstruments.get(channel) || "triangle";
 
 		if (OSCILLATOR_TYPES.includes(instrument as OscillatorType)) {
 			this.playOscillatorNote(note, instrument as OscillatorType, matchDuration, channelGain);
