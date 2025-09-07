@@ -24,6 +24,26 @@
 	z-index: 100;
 }
 
+#github-link {
+	bottom: 5px;
+	font-size: 14px;
+	position: absolute;
+	right: 5px;
+	z-index: 100;
+}
+
+#github-link a {
+	color: white;
+	font-family: sans-serif;
+	opacity: .5;
+	text-decoration: none;
+}
+
+#github-link a:hover {
+	opacity: 1;
+	text-decoration: underline;
+}
+
 body {
 	font-family: sans-serif;
 	margin: 0;

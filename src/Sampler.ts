@@ -122,22 +122,20 @@ export class Sampler {
 
 		this.activeSources.set(midi, { source, gainNode });
 
+		const releaseTime = 0.1; // 100ms fade out
 		if (matchDuration) {
 			// Schedule the note to stop
-			const releaseTime = 0.1; // 100ms fade out
 			const stopTime = this.audioContext.currentTime + duration;
 			if (duration > releaseTime) {
 				const rampStartTime = stopTime - releaseTime;
 				gainNode.gain.setValueAtTime(finalGain, rampStartTime);
-				gainNode.gain.linearRampToValueAtTime(0, stopTime);
-			} else {
-				gainNode.gain.linearRampToValueAtTime(0, stopTime);
 			}
+			gainNode.gain.linearRampToValueAtTime(0, stopTime);
 			source.stop(stopTime);
 		} else {
-			const releaseTime = 0.1;
 			const stopTime = this.audioContext.currentTime + duration + releaseTime;
 			gainNode.gain.setValueAtTime(finalGain, stopTime);
+			gainNode.gain.linearRampToValueAtTime(0, stopTime);
 			source.stop(stopTime);
 		}
 

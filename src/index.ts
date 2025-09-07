@@ -77,17 +77,8 @@ class MidiVisualizer {
 		} catch (e) {
 			console.error("Could not detect GPU info, defaulting to non-lightweight mode.", e);
 		}
-		// Check for power saving mode via battery API
-		// This is an async operation, so it's a bit tricky to use for initial sync setup.
-		// For now, we rely on the GPU check. A more advanced implementation could
-		// update the setting once the battery promise resolves.
-		// navigator.getBattery().then(battery => {
-		//   if (battery.charging === false && battery.level < 0.5) { // Example condition
-		//     // logic to enable lightweight mode
-		//   }
-		// });
 
-		return false; // Default to false if detection fails or not Intel
+		return false;
 	}
 
 	constructor() {

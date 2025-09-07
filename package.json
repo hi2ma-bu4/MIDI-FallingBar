@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "A web-based MIDI visualizer using WebGL",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hi2ma-bu4/MIDI-FallingBar.git"
+  },
   "scripts": {
     "build": "webpack --mode=production",
     "start": "webpack serve --mode=development"
