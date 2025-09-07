@@ -85,7 +85,7 @@ export class NoteVisualizer {
 				instancedMesh.setMatrixAt(index, matrix);
 
 				// Store instance info for updates
-				const noteKey = `${note.midi}-${note.time}`;
+				const noteKey = `${note.midi}-${note.time}-${channel}`;
 				const originalColor = baseColor.clone();
 				instancedMesh.setColorAt(index, originalColor);
 
@@ -183,7 +183,7 @@ export class NoteVisualizer {
 				}
 			}
 
-			const noteKey = `${note.midi}-${note.time}`;
+			const noteKey = `${note.midi}-${note.time}-${channel}`;
 			const isFinished = note.time + note.duration < elapsedTime;
 			const isActive = activeNoteKeys.has(noteKey);
 
