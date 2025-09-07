@@ -17,7 +17,7 @@ interface PlayableNote {
 class MidiVisualizer {
 	private scene: Scene;
 	private camera: PerspectiveCamera;
-	private renderer: WebGLRenderer;
+	private renderer!: WebGLRenderer;
 	private piano: Piano;
 	private noteVisualizer: NoteVisualizer;
 	private synth: Synth;
@@ -29,7 +29,7 @@ class MidiVisualizer {
 	private elapsedTime = 0;
 	private notesToPlay: PlayableNote[] = [];
 	private nextNoteIndex = 0;
-	private activeNotes: Map<number, Note> = new Map();
+	private activeNotes: Map<string, Note> = new Map();
 
 	// UI Elements
 	private playPauseBtn!: HTMLButtonElement;
@@ -42,6 +42,7 @@ class MidiVisualizer {
 	private instrumentSettingsToggle!: HTMLHeadingElement;
 	private topDownViewToggle!: HTMLInputElement;
 	private matchNoteDurationToggle!: HTMLInputElement;
+	private lightweightModeToggle!: HTMLInputElement;
 	private pipBtn!: HTMLButtonElement;
 	private channelInstruments: Map<number, string> = new Map();
 	private channelInitialVolumes: Map<number, number> = new Map();
@@ -55,7 +56,6 @@ class MidiVisualizer {
 	constructor() {
 		this.scene = new Scene();
 		this.camera = new PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-		this.renderer = new WebGLRenderer({ antialias: true });
 		this.piano = new Piano();
 		this.noteVisualizer = new NoteVisualizer(this.scene, this.piano);
 		this.synth = new Synth();
@@ -66,8 +66,11 @@ class MidiVisualizer {
 
 	private init(): void {
 		this.scene.background = new Color(0x2c3e50);
+		const isLightweight = (document.getElementById("lightweight-mode-toggle") as HTMLInputElement).checked;
+
+		this.renderer = new WebGLRenderer({ antialias: !isLightweight });
 		this.renderer.setSize(window.innerWidth, window.innerHeight);
-		this.renderer.setPixelRatio(window.devicePixelRatio);
+		this.renderer.setPixelRatio(isLightweight ? 1 : window.devicePixelRatio);
 		document.getElementById("webgl-container")?.appendChild(this.renderer.domElement);
 
 		this.camera.position.set(0, 8, 12);
@@ -91,10 +94,14 @@ class MidiVisualizer {
 		this.instrumentSelectorsContainer = document.getElementById("instrument-selectors-container") as HTMLDivElement;
 		this.instrumentSettingsToggle = document.getElementById("instrument-settings-toggle") as HTMLHeadingElement;
 		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
+		this.lightweightModeToggle = document.getElementById("lightweight-mode-toggle") as HTMLInputElement;
 		this.pipBtn = document.getElementById("pip-btn") as HTMLButtonElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.pipBtn.addEventListener("click", () => this.togglePiP());
+		this.lightweightModeToggle.addEventListener("change", () => {
+			alert("Settings will be applied after reloading the page.");
+		});
 		this.instrumentSettingsToggle.addEventListener("click", () => {
 			this.instrumentSelectorsContainer.classList.toggle("collapsed");
 			const arrow = this.instrumentSettingsToggle.querySelector("span");
@@ -438,7 +445,7 @@ class MidiVisualizer {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(note.midi, note);
+				this.activeNotes.set(`${note.midi}-${note.time}`, note);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -472,7 +479,7 @@ class MidiVisualizer {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(note.midi, note);
+				this.activeNotes.set(`${note.midi}-${note.time}`, note);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -569,20 +576,20 @@ class MidiVisualizer {
 			color.addScalar(ACTIVE_BRIGHTNESS);
 			this.piano.pressKey(note.midi, color);
 
-			this.activeNotes.set(note.midi, note);
+			this.activeNotes.set(`${note.midi}-${note.time}`, note);
 			this.nextNoteIndex++;
 		}
 
 		// Notes OFF
-		this.activeNotes.forEach((note, midi) => {
+		this.activeNotes.forEach((note, noteKey) => {
 			if (note.time + note.duration <= this.elapsedTime) {
 				// If match duration is OFF, we manually stop the note.
 				// If it's ON, the synth/sampler is responsible for stopping it at the right time.
 				if (!this.matchNoteDurationToggle.checked) {
-					this.synth.stopNote(midi);
+					this.synth.stopNote(note.midi);
 				}
-				this.piano.releaseKey(midi);
-				this.activeNotes.delete(midi);
+				this.piano.releaseKey(note.midi);
+				this.activeNotes.delete(noteKey);
 			}
 		});
 

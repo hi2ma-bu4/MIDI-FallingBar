@@ -18,6 +18,7 @@ interface NoteInstance {
 	note: Note;
 	channel: number;
 	visible: boolean;
+	state: "normal" | "active" | "finished";
 }
 
 export class NoteVisualizer {
@@ -95,6 +96,7 @@ export class NoteVisualizer {
 					note,
 					channel: channel,
 					visible: true,
+					state: "normal",
 				};
 				this.noteMap.set(noteKey, noteInstance);
 			});
@@ -109,13 +111,10 @@ export class NoteVisualizer {
 		this.notesByTime = Array.from(this.noteMap.values()).sort((a, b) => a.note.time - b.note.time);
 	}
 
-	public update(elapsedTime: number, activeNotes: Map<number, Note>): void {
+	public update(elapsedTime: number, activeNotes: Map<string, Note>): void {
 		if (this.notesByTime.length === 0) return;
 
-		const activeNoteKeys = new Set<string>();
-		activeNotes.forEach((note) => {
-			activeNoteKeys.add(`${note.midi}-${note.time}`);
-		});
+		const activeNoteKeys = new Set(activeNotes.keys());
 
 		const visibleStartTime = elapsedTime - 5;
 		const visibleEndTime = elapsedTime + 15;
@@ -188,18 +187,24 @@ export class NoteVisualizer {
 			const isFinished = note.time + note.duration < elapsedTime;
 			const isActive = activeNoteKeys.has(noteKey);
 
-			mesh.getColorAt(instanceId, this.tempColor);
-			const targetColor = this.tempColor.clone(); // Start with current color
-
+			let newState: "normal" | "active" | "finished" = "normal";
 			if (isActive) {
-				targetColor.copy(originalColor).addScalar(ACTIVE_BRIGHTNESS);
+				newState = "active";
 			} else if (isFinished) {
-				targetColor.copy(originalColor).multiplyScalar(PLAYED_DARKEN_FACTOR);
-			} else {
-				targetColor.copy(originalColor);
+				newState = "finished";
 			}
 
-			if (!this.tempColor.equals(targetColor)) {
+			if (instance.state !== newState) {
+				instance.state = newState;
+
+				const targetColor = this.tempColor; // Use the temp color to avoid allocations
+				if (newState === "active") {
+					targetColor.copy(originalColor).addScalar(ACTIVE_BRIGHTNESS);
+				} else if (newState === "finished") {
+					targetColor.copy(originalColor).multiplyScalar(PLAYED_DARKEN_FACTOR);
+				} else {
+					targetColor.copy(originalColor);
+				}
 				mesh.setColorAt(instanceId, targetColor);
 				if (mesh.instanceColor) {
 					mesh.instanceColor.needsUpdate = true;
@@ -214,6 +219,7 @@ export class NoteVisualizer {
 
 	public resetVisuals(): void {
 		this.notesByTime.forEach((instance) => {
+			instance.state = "normal";
 			const { mesh, instanceId, originalColor } = instance;
 			mesh.setColorAt(instanceId, originalColor);
 			if (mesh.instanceColor) {
