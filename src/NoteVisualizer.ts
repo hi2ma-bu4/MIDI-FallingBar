@@ -33,6 +33,10 @@ export class NoteVisualizer {
 	private noteMap: Map<string, NoteInstance> = new Map();
 	private notesByTime: NoteInstance[] = [];
 	private tempColor = new Color(); // To avoid creating new Color objects in the loop
+	private tempMatrix = new Matrix4();
+	private tempPosition = new Vector3();
+	private tempQuaternion = new Quaternion();
+	private tempScale = new Vector3();
 
 	constructor(scene: Scene, piano: Piano) {
 		this.scene = scene;
@@ -73,21 +77,19 @@ export class NoteVisualizer {
 				const key = this.piano.getKey(midi);
 				if (!key) return;
 
-				const keyPosition = key.position.clone();
+				const keyPosition = key.position;
 				const keyWidth = this.piano.isBlackKey(midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 
-				const matrix = new Matrix4();
 				const yOffset = channel * 0.001; // To prevent z-fighting
-				// Use the white key height as a reference for all notes to keep them on the same plane
 				const keyTopY = WHITE_KEY_HEIGHT / 2;
 				const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
 
-				const position = new Vector3(keyPosition.x, barY + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
-				const scale = new Vector3(keyWidth * 0.9, 1, duration * TIME_SCALE);
-				const quaternion = new Quaternion();
+				this.tempPosition.set(keyPosition.x, barY + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
+				this.tempScale.set(keyWidth * 0.9, 1, duration * TIME_SCALE);
+				this.tempQuaternion.identity();
 
-				matrix.compose(position, quaternion, scale);
-				instancedMesh.setMatrixAt(index, matrix);
+				this.tempMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+				instancedMesh.setMatrixAt(index, this.tempMatrix);
 
 				// Store instance info for updates
 				const noteKey = `${note.midi}-${note.time}-${channel}`;
@@ -138,13 +140,11 @@ export class NoteVisualizer {
 			const instance = this.notesByTime[i];
 			if (instance.visible) {
 				instance.visible = false;
-				const matrix = new Matrix4();
-				instance.mesh.getMatrixAt(instance.instanceId, matrix);
-				const position = new Vector3();
-				const quaternion = new Quaternion();
-				matrix.decompose(position, quaternion, new Vector3());
-				matrix.compose(position, quaternion, new Vector3(0, 0, 0));
-				instance.mesh.setMatrixAt(instance.instanceId, matrix);
+				instance.mesh.getMatrixAt(instance.instanceId, this.tempMatrix);
+				this.tempMatrix.decompose(this.tempPosition, this.tempQuaternion, this.tempScale);
+				this.tempScale.set(0, 0, 0); // Hide by scaling to 0
+				this.tempMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+				instance.mesh.setMatrixAt(instance.instanceId, this.tempMatrix);
 				meshesToUpdate.add(instance.mesh);
 			}
 		}
@@ -156,13 +156,11 @@ export class NoteVisualizer {
 			if (note.time > visibleEndTime) {
 				if (instance.visible) {
 					instance.visible = false;
-					const matrix = new Matrix4();
-					mesh.getMatrixAt(instanceId, matrix);
-					const position = new Vector3();
-					const quaternion = new Quaternion();
-					matrix.decompose(position, quaternion, new Vector3());
-					matrix.compose(position, quaternion, new Vector3(0, 0, 0));
-					mesh.setMatrixAt(instanceId, matrix);
+					mesh.getMatrixAt(instanceId, this.tempMatrix);
+					this.tempMatrix.decompose(this.tempPosition, this.tempQuaternion, this.tempScale);
+					this.tempScale.set(0, 0, 0); // Hide by scaling to 0
+					this.tempMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+					mesh.setMatrixAt(instanceId, this.tempMatrix);
 					meshesToUpdate.add(mesh);
 				}
 				continue;
@@ -172,18 +170,16 @@ export class NoteVisualizer {
 				instance.visible = true;
 				const key = this.piano.getKey(note.midi);
 				if (key) {
-					const keyPosition = key.position.clone();
+					const keyPosition = key.position;
 					const keyWidth = this.piano.isBlackKey(note.midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
 					const yOffset = channel * 0.001;
-					// Use the white key height as a reference for all notes to keep them on the same plane
 					const keyTopY = WHITE_KEY_HEIGHT / 2;
-					const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
-					const position = new Vector3(keyPosition.x, barY + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
-					const scale = new Vector3(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
-					const quaternion = new Quaternion();
-					const matrix = new Matrix4();
-					matrix.compose(position, quaternion, scale);
-					mesh.setMatrixAt(instanceId, matrix);
+					const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01;
+					this.tempPosition.set(keyPosition.x, barY + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
+					this.tempScale.set(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
+					this.tempQuaternion.identity();
+					this.tempMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+					mesh.setMatrixAt(instanceId, this.tempMatrix);
 					meshesToUpdate.add(mesh);
 				}
 			}
