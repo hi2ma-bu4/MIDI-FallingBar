@@ -29,9 +29,11 @@ const vertexShader = `
 	void main() {
 			vColor = aColor;
 			vState = aState;
+			float noteEndTime = aStartTime + aDuration;
+			float isVisible = step(u_time - 5.0, noteEndTime) * step(aStartTime, u_time + 15.0);
 			mat4 instanceMatrix = mat4(
 					vec4(aScaleX, 0.0, 0.0, 0.0),
-					vec4(0.0, 1.0, 0.0, 0.0),
+					vec4(0.0, isVisible, 0.0, 0.0),
 					vec4(0.0, 0.0, aScaleZ, 0.0),
 					vec4(aOffset.x, aOffset.y, aOffset.z, 1.0)
 			);
