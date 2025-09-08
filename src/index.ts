@@ -526,8 +526,11 @@ class MidiVisualizer {
 
 	private initPiP(): void {
 		// Create a video element from the main canvas's stream
+		let fps = 60;
+		if (this.performanceModeSelect.value === "super-lightweight") fps = 30;
+
 		// @ts-ignore
-		const stream = this.renderer.domElement.captureStream(60); // 60 fps
+		const stream = this.renderer.domElement.captureStream(fps);
 		this.pipVideo = document.createElement("video");
 		this.pipVideo.srcObject = stream;
 		this.pipVideo.muted = true; // Video must be muted to play in background
