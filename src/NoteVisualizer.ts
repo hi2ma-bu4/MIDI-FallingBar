@@ -1,6 +1,6 @@
 import type { Midi } from "@tonejs/midi";
 import type { Note } from "@tonejs/midi/dist/Note";
-import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Scene, Vector3 } from "three";
+import { BoxGeometry, Color, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Scene, ShaderMaterial, Vector3 } from "three";
 import { BLACK_KEY_WIDTH, Piano, WHITE_KEY_HEIGHT, WHITE_KEY_WIDTH } from "./Piano";
 import { TIME_SCALE } from "./constants";
 
@@ -11,14 +11,61 @@ const PLAYED_DARKEN_FACTOR = 0.4;
 // A simple color palette for different MIDI channels
 export const CHANNEL_COLORS = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffffff, 0xff8800, 0x00ff88, 0x8800ff, 0x88ff00, 0x0088ff, 0xff0088, 0x888888, 0xcc0000, 0x00cc00];
 
+const vertexShader = `
+	uniform float u_time;
+	uniform float u_time_scale;
+
+	attribute vec3 aOffset;
+	attribute vec3 aColor;
+	attribute float aScaleX;
+	attribute float aScaleZ;
+	attribute float aStartTime;
+	attribute float aDuration;
+	attribute float aState;
+
+	varying vec3 vColor;
+	varying float vState;
+
+	void main() {
+			vColor = aColor;
+			vState = aState;
+			float noteEndTime = aStartTime + aDuration;
+			float isVisible = step(u_time - 5.0, noteEndTime) * step(aStartTime, u_time + 15.0);
+			mat4 instanceMatrix = mat4(
+					vec4(aScaleX, 0.0, 0.0, 0.0),
+					vec4(0.0, isVisible, 0.0, 0.0),
+					vec4(0.0, 0.0, aScaleZ, 0.0),
+					vec4(aOffset.x, aOffset.y, aOffset.z, 1.0)
+			);
+			gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+	}
+`;
+
+const fragmentShader = `
+	varying vec3 vColor;
+	varying float vState;
+
+	uniform float u_active_brightness;
+	uniform float u_played_darken_factor;
+	uniform float u_opacity;
+
+	void main() {
+			vec3 finalColor = vColor;
+			if (vState == 1.0) { // active
+					finalColor += u_active_brightness;
+			} else if (vState == 2.0) { // finished
+					finalColor *= u_played_darken_factor;
+			}
+			gl_FragColor = vec4(finalColor, u_opacity);
+	}
+`;
+
 interface NoteInstance {
-	mesh: InstancedMesh;
 	instanceId: number;
-	originalColor: Color;
 	note: Note;
 	channel: number;
-	visible: boolean;
 	state: "normal" | "active" | "finished";
+	mesh: InstancedMesh<BoxGeometry, ShaderMaterial>;
 }
 
 interface PlayableNote {
@@ -32,7 +79,7 @@ export class NoteVisualizer {
 	public noteObjects: Group;
 	private noteMap: Map<string, NoteInstance> = new Map();
 	private notesByTime: NoteInstance[] = [];
-	private tempColor = new Color(); // To avoid creating new Color objects in the loop
+	private tempColor = new Color();
 
 	constructor(scene: Scene, piano: Piano) {
 		this.scene = scene;
@@ -43,7 +90,6 @@ export class NoteVisualizer {
 
 	public visualize(midi: Midi): void {
 		this.clear();
-
 		const notesByChannel = new Map<number, Note[]>();
 		midi.tracks.forEach((track) => {
 			if (track.channel === 9) return;
@@ -56,17 +102,30 @@ export class NoteVisualizer {
 		});
 
 		notesByChannel.forEach((notes, channel) => {
-			const baseColor = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
-			const material = new MeshStandardMaterial({
-				color: baseColor,
-				roughness: 0.5,
+			const material = new ShaderMaterial({
+				uniforms: {
+					u_time: { value: 0.0 },
+					u_time_scale: { value: TIME_SCALE },
+					u_active_brightness: { value: ACTIVE_BRIGHTNESS },
+					u_played_darken_factor: { value: PLAYED_DARKEN_FACTOR },
+					u_opacity: { value: 0.9 },
+				},
+				vertexShader,
+				fragmentShader,
 				transparent: true,
-				opacity: 0.9,
 			});
 
 			const geometry = new BoxGeometry(1, NOTE_BAR_HEIGHT, 1);
 			const instancedMesh = new InstancedMesh(geometry, material, notes.length);
 			instancedMesh.name = `channel_${channel}`;
+
+			const offsets = new Float32Array(notes.length * 3);
+			const colors = new Float32Array(notes.length * 3);
+			const scalesX = new Float32Array(notes.length);
+			const scalesZ = new Float32Array(notes.length);
+			const startTimes = new Float32Array(notes.length);
+			const durations = new Float32Array(notes.length);
+			const states = new Float32Array(notes.length);
 
 			notes.forEach((note, index) => {
 				const { midi, time, duration } = note;
@@ -75,123 +134,64 @@ export class NoteVisualizer {
 
 				const keyPosition = key.position.clone();
 				const keyWidth = this.piano.isBlackKey(midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
-
-				const matrix = new Matrix4();
-				const yOffset = channel * 0.001; // To prevent z-fighting
-				// Use the white key height as a reference for all notes to keep them on the same plane
+				const yOffset = channel * 0.001;
 				const keyTopY = WHITE_KEY_HEIGHT / 2;
-				const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
-
+				const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01;
 				const position = new Vector3(keyPosition.x, barY + yOffset, -time * TIME_SCALE - (duration * TIME_SCALE) / 2);
-				const scale = new Vector3(keyWidth * 0.9, 1, duration * TIME_SCALE);
-				const quaternion = new Quaternion();
 
-				matrix.compose(position, quaternion, scale);
-				instancedMesh.setMatrixAt(index, matrix);
+				offsets[index * 3] = position.x;
+				offsets[index * 3 + 1] = position.y;
+				offsets[index * 3 + 2] = position.z;
 
-				// Store instance info for updates
+				const baseColor = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
+				colors[index * 3] = baseColor.r;
+				colors[index * 3 + 1] = baseColor.g;
+				colors[index * 3 + 2] = baseColor.b;
+
+				scalesX[index] = keyWidth * 0.9;
+				scalesZ[index] = duration * TIME_SCALE;
+				startTimes[index] = time;
+				durations[index] = duration;
+				states[index] = 0.0; // 0: normal, 1: active, 2: finished
+
 				const noteKey = `${note.midi}-${note.time}-${channel}`;
-				const originalColor = baseColor.clone();
-				instancedMesh.setColorAt(index, originalColor);
-
 				const noteInstance: NoteInstance = {
 					mesh: instancedMesh,
 					instanceId: index,
-					originalColor,
 					note,
 					channel: channel,
-					visible: true,
 					state: "normal",
 				};
 				this.noteMap.set(noteKey, noteInstance);
 			});
 
-			if (instancedMesh.instanceColor) {
-				instancedMesh.instanceColor.needsUpdate = true;
-			}
+			geometry.setAttribute("aOffset", new InstancedBufferAttribute(offsets, 3));
+			geometry.setAttribute("aColor", new InstancedBufferAttribute(colors, 3));
+			geometry.setAttribute("aScaleX", new InstancedBufferAttribute(scalesX, 1));
+			geometry.setAttribute("aScaleZ", new InstancedBufferAttribute(scalesZ, 1));
+			geometry.setAttribute("aStartTime", new InstancedBufferAttribute(startTimes, 1));
+			geometry.setAttribute("aDuration", new InstancedBufferAttribute(durations, 1));
+			geometry.setAttribute("aState", new InstancedBufferAttribute(states, 1));
+
 			this.noteObjects.add(instancedMesh);
 		});
-
-		// Create a sorted list for efficient iteration in `update`
 		this.notesByTime = Array.from(this.noteMap.values()).sort((a, b) => a.note.time - b.note.time);
 	}
 
 	public update(elapsedTime: number, activeNotes: Map<string, PlayableNote>, isSuperLightweight = false): void {
-		if (this.notesByTime.length === 0) return;
+		this.noteObjects.children.forEach((mesh) => {
+			if (mesh instanceof InstancedMesh && mesh.material instanceof ShaderMaterial) {
+				mesh.material.uniforms.u_time.value = elapsedTime;
+			}
+		});
+
+		if (isSuperLightweight) return;
 
 		const activeNoteKeys = new Set(activeNotes.keys());
+		let stateChanged = false;
 
-		const visibleStartTime = elapsedTime - 5;
-		const visibleEndTime = elapsedTime + 15;
-
-		const meshesToUpdate = new Set<InstancedMesh>();
-
-		// Find the starting index for iteration
-		let startIndex = 0;
-		for (let i = 0; i < this.notesByTime.length; i++) {
-			const note = this.notesByTime[i].note;
-			if (note.time + note.duration >= visibleStartTime) {
-				startIndex = i;
-				break;
-			}
-			// Hide notes that are far in the past
-			const instance = this.notesByTime[i];
-			if (instance.visible) {
-				instance.visible = false;
-				const matrix = new Matrix4();
-				instance.mesh.getMatrixAt(instance.instanceId, matrix);
-				const position = new Vector3();
-				const quaternion = new Quaternion();
-				matrix.decompose(position, quaternion, new Vector3());
-				matrix.compose(position, quaternion, new Vector3(0, 0, 0));
-				instance.mesh.setMatrixAt(instance.instanceId, matrix);
-				meshesToUpdate.add(instance.mesh);
-			}
-		}
-
-		for (let i = startIndex; i < this.notesByTime.length; i++) {
-			const instance = this.notesByTime[i];
-			const { mesh, instanceId, originalColor, note, channel } = instance;
-
-			if (note.time > visibleEndTime) {
-				if (instance.visible) {
-					instance.visible = false;
-					const matrix = new Matrix4();
-					mesh.getMatrixAt(instanceId, matrix);
-					const position = new Vector3();
-					const quaternion = new Quaternion();
-					matrix.decompose(position, quaternion, new Vector3());
-					matrix.compose(position, quaternion, new Vector3(0, 0, 0));
-					mesh.setMatrixAt(instanceId, matrix);
-					meshesToUpdate.add(mesh);
-				}
-				continue;
-			}
-
-			if (!instance.visible) {
-				instance.visible = true;
-				const key = this.piano.getKey(note.midi);
-				if (key) {
-					const keyPosition = key.position.clone();
-					const keyWidth = this.piano.isBlackKey(note.midi) ? BLACK_KEY_WIDTH : WHITE_KEY_WIDTH;
-					const yOffset = channel * 0.001;
-					// Use the white key height as a reference for all notes to keep them on the same plane
-					const keyTopY = WHITE_KEY_HEIGHT / 2;
-					const barY = keyTopY - NOTE_BAR_HEIGHT / 2 - 0.01; // Place bar slightly below key top
-					const position = new Vector3(keyPosition.x, barY + yOffset, -note.time * TIME_SCALE - (note.duration * TIME_SCALE) / 2);
-					const scale = new Vector3(keyWidth * 0.9, 1, note.duration * TIME_SCALE);
-					const quaternion = new Quaternion();
-					const matrix = new Matrix4();
-					matrix.compose(position, quaternion, scale);
-					mesh.setMatrixAt(instanceId, matrix);
-					meshesToUpdate.add(mesh);
-				}
-			}
-
-			if (isSuperLightweight) {
-				continue;
-			}
-
+		this.notesByTime.forEach((instance) => {
+			const { note, channel, instanceId, mesh } = instance;
 			const noteKey = `${note.midi}-${note.time}-${channel}`;
 			const isFinished = note.time + note.duration < elapsedTime;
 			const isActive = activeNoteKeys.has(noteKey);
@@ -205,34 +205,26 @@ export class NoteVisualizer {
 
 			if (instance.state !== newState) {
 				instance.state = newState;
+				const stateAttribute = mesh.geometry.getAttribute("aState") as InstancedBufferAttribute;
+				let stateValue = 0.0;
+				if (newState === "active") stateValue = 1.0;
+				else if (newState === "finished") stateValue = 2.0;
 
-				const targetColor = this.tempColor; // Use the temp color to avoid allocations
-				if (newState === "active") {
-					targetColor.copy(originalColor).addScalar(ACTIVE_BRIGHTNESS);
-				} else if (newState === "finished") {
-					targetColor.copy(originalColor).multiplyScalar(PLAYED_DARKEN_FACTOR);
-				} else {
-					targetColor.copy(originalColor);
-				}
-				mesh.setColorAt(instanceId, targetColor);
-				if (mesh.instanceColor) {
-					mesh.instanceColor.needsUpdate = true;
-				}
+				stateAttribute.setX(instanceId, stateValue);
+				stateAttribute.needsUpdate = true;
+				stateChanged = true;
 			}
-		}
-
-		meshesToUpdate.forEach((mesh) => {
-			mesh.instanceMatrix.needsUpdate = true;
 		});
 	}
 
 	public resetVisuals(): void {
 		this.notesByTime.forEach((instance) => {
-			instance.state = "normal";
-			const { mesh, instanceId, originalColor } = instance;
-			mesh.setColorAt(instanceId, originalColor);
-			if (mesh.instanceColor) {
-				mesh.instanceColor.needsUpdate = true;
+			if (instance.state !== "normal") {
+				instance.state = "normal";
+				const { mesh, instanceId } = instance;
+				const stateAttribute = mesh.geometry.getAttribute("aState") as InstancedBufferAttribute;
+				stateAttribute.setX(instanceId, 0.0);
+				stateAttribute.needsUpdate = true;
 			}
 		});
 	}
@@ -240,7 +232,8 @@ export class NoteVisualizer {
 	public clear(): void {
 		this.noteObjects.children.forEach((child) => {
 			if (child instanceof InstancedMesh) {
-				child.dispose();
+				child.geometry.dispose();
+				(child.material as ShaderMaterial).dispose();
 			}
 		});
 		this.noteObjects.clear();
@@ -250,9 +243,9 @@ export class NoteVisualizer {
 
 	public setChannelOpacity(channel: number, opacity: number): void {
 		const meshName = `channel_${channel}`;
-		const mesh = this.noteObjects.getObjectByName(meshName) as InstancedMesh;
-		if (mesh && mesh.material instanceof MeshStandardMaterial) {
-			mesh.material.opacity = opacity;
+		const mesh = this.noteObjects.getObjectByName(meshName) as InstancedMesh<BoxGeometry, ShaderMaterial>;
+		if (mesh) {
+			mesh.material.uniforms.u_opacity.value = opacity;
 		}
 	}
 }
