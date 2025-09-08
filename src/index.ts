@@ -36,6 +36,7 @@ class MidiVisualizer {
 	private progressBar!: HTMLDivElement;
 	private progressElement!: HTMLDivElement;
 	private timeDisplay!: HTMLDivElement;
+	private lastFormattedTime = "";
 	private uiContainer!: HTMLDivElement;
 	private statsDisplay!: HTMLDivElement;
 	private fpsDisplay!: HTMLDivElement;
@@ -43,7 +44,7 @@ class MidiVisualizer {
 	private instrumentSettingsToggle!: HTMLHeadingElement;
 	private topDownViewToggle!: HTMLInputElement;
 	private matchNoteDurationToggle!: HTMLInputElement;
-	private lightweightModeToggle!: HTMLInputElement;
+	private performanceModeSelect!: HTMLSelectElement;
 	private pipBtn!: HTMLButtonElement;
 	private channelInstruments: Map<number, string> = new Map();
 	private channelInitialVolumes: Map<number, number> = new Map();
@@ -58,7 +59,7 @@ class MidiVisualizer {
 	private frameCount = 0;
 	private lastFPSTime = 0;
 
-	private getInitialLightweightMode(): boolean {
+	private getInitialPerformanceMode(): "lightweight" | "normal" {
 		try {
 			const canvas = document.createElement("canvas");
 			const gl = canvas.getContext("experimental-webgl") || canvas.getContext("webgl");
@@ -70,7 +71,7 @@ class MidiVisualizer {
 					const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
 					if (renderer.toLowerCase().includes("intel")) {
 						console.log("Intel GPU detected, enabling lightweight mode by default.");
-						return true;
+						return "lightweight";
 					}
 				}
 			}
@@ -78,7 +79,7 @@ class MidiVisualizer {
 			console.error("Could not detect GPU info, defaulting to non-lightweight mode.", e);
 		}
 
-		return false;
+		return "normal";
 	}
 
 	constructor() {
@@ -96,15 +97,10 @@ class MidiVisualizer {
 	private init(): void {
 		this.scene.background = new Color(0x2c3e50);
 
-		// Set lightweight mode based on GPU detection before initializing the renderer
-		this.lightweightModeToggle = document.getElementById("lightweight-mode-toggle") as HTMLInputElement;
-		this.lightweightModeToggle.checked = this.getInitialLightweightMode();
-		const isLightweight = this.lightweightModeToggle.checked;
-
-		this.renderer = new WebGLRenderer({ antialias: !isLightweight });
-		this.renderer.setSize(window.innerWidth, window.innerHeight);
-		this.renderer.setPixelRatio(isLightweight ? 1 : window.devicePixelRatio);
-		document.getElementById("webgl-container")?.appendChild(this.renderer.domElement);
+		// Set performance mode
+		this.performanceModeSelect = document.getElementById("performance-mode-select") as HTMLSelectElement;
+		this.performanceModeSelect.value = this.getInitialPerformanceMode();
+		this.recreateRenderer();
 
 		this.camera.position.set(0, 8, 12);
 		this.camera.lookAt(0, 0, 0);
@@ -132,10 +128,9 @@ class MidiVisualizer {
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.pipBtn.addEventListener("click", () => this.togglePiP());
-		this.lightweightModeToggle.addEventListener("change", (e) => {
-			const isLightweight = (e.target as HTMLInputElement).checked;
-			this.recreateRenderer(isLightweight);
-		});
+
+		this.performanceModeSelect.addEventListener("change", () => this.recreateRenderer());
+
 		this.instrumentSettingsToggle.addEventListener("click", () => {
 			this.instrumentSelectorsContainer.classList.toggle("collapsed");
 			const arrow = this.instrumentSettingsToggle.querySelector("span");
@@ -489,7 +484,8 @@ class MidiVisualizer {
 				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
+		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
 	}
 
 	private skipTime(seconds: number): void {
@@ -524,7 +520,8 @@ class MidiVisualizer {
 				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
+		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
 	}
 
 	private initPiP(): void {
@@ -563,12 +560,15 @@ class MidiVisualizer {
 		}
 	}
 
-	private recreateRenderer(isLightweight: boolean): void {
+	private recreateRenderer(): void {
 		// Clean up the old renderer
 		if (this.renderer) {
 			this.renderer.dispose();
 			this.renderer.domElement.parentElement?.removeChild(this.renderer.domElement);
 		}
+
+		const mode = this.performanceModeSelect.value;
+		const isLightweight = mode === "lightweight" || mode === "super-lightweight";
 
 		// Create a new renderer with the updated settings
 		this.renderer = new WebGLRenderer({ antialias: !isLightweight });
@@ -600,7 +600,11 @@ class MidiVisualizer {
 
 		const currentTime = this.formatTime(this.elapsedTime);
 		const totalTime = this.formatTime(this.midiData.duration);
-		this.timeDisplay.textContent = `${currentTime} / ${totalTime}`;
+		const formattedTime = `${currentTime} / ${totalTime}`;
+		if (this.lastFormattedTime !== formattedTime) {
+			this.timeDisplay.textContent = formattedTime;
+			this.lastFormattedTime = formattedTime;
+		}
 
 		// Update note statistics
 		const totalNotes = this.notesToPlay.length;
@@ -700,7 +704,8 @@ class MidiVisualizer {
 		requestAnimationFrame(this.animate.bind(this));
 		this.updateFPS(now);
 		this.updatePlayback();
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
+		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
 		this.renderer.render(this.scene, this.camera);
 	}
 }

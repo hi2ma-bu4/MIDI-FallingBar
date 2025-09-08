@@ -116,7 +116,7 @@ export class NoteVisualizer {
 		this.notesByTime = Array.from(this.noteMap.values()).sort((a, b) => a.note.time - b.note.time);
 	}
 
-	public update(elapsedTime: number, activeNotes: Map<string, PlayableNote>): void {
+	public update(elapsedTime: number, activeNotes: Map<string, PlayableNote>, isSuperLightweight = false): void {
 		if (this.notesByTime.length === 0) return;
 
 		const activeNoteKeys = new Set(activeNotes.keys());
@@ -186,6 +186,10 @@ export class NoteVisualizer {
 					mesh.setMatrixAt(instanceId, matrix);
 					meshesToUpdate.add(mesh);
 				}
+			}
+
+			if (isSuperLightweight) {
+				continue;
 			}
 
 			const noteKey = `${note.midi}-${note.time}-${channel}`;
