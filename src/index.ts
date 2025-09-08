@@ -29,7 +29,7 @@ class MidiVisualizer {
 	private elapsedTime = 0;
 	private notesToPlay: PlayableNote[] = [];
 	private nextNoteIndex = 0;
-	private activeNotes: Map<string, Note> = new Map();
+	private activeNotes: Map<string, PlayableNote> = new Map();
 
 	// UI Elements
 	private playPauseBtn!: HTMLButtonElement;
@@ -479,13 +479,14 @@ class MidiVisualizer {
 
 		// Recover notes that should be active at the seek time
 		for (let i = 0; i < this.notesToPlay.length; i++) {
-			const { note, channel } = this.notesToPlay[i];
+			const playableNote = this.notesToPlay[i];
+			const { note, channel } = playableNote;
 			// A note is active if the seek time is between its start and end times
 			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
+				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -514,12 +515,13 @@ class MidiVisualizer {
 
 		// Recover notes that should be active at the new time
 		for (let i = 0; i < this.notesToPlay.length; i++) {
-			const { note, channel } = this.notesToPlay[i];
+			const playableNote = this.notesToPlay[i];
+			const { note, channel } = playableNote;
 			if (note.time <= this.elapsedTime && note.time + note.duration > this.elapsedTime) {
 				const color = new Color(CHANNEL_COLORS[channel % CHANNEL_COLORS.length]);
 				color.addScalar(ACTIVE_BRIGHTNESS);
 				this.piano.pressKey(note.midi, color);
-				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
+				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
 		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
@@ -625,7 +627,8 @@ class MidiVisualizer {
 
 		// Notes ON
 		while (this.nextNoteIndex < this.notesToPlay.length && this.notesToPlay[this.nextNoteIndex].note.time <= this.elapsedTime) {
-			const { note, channel } = this.notesToPlay[this.nextNoteIndex];
+			const playableNote = this.notesToPlay[this.nextNoteIndex];
+			const { note, channel } = playableNote;
 			const matchDuration = this.matchNoteDurationToggle.checked;
 			this.synth.playNote(note, channel, matchDuration);
 
@@ -633,22 +636,52 @@ class MidiVisualizer {
 			color.addScalar(ACTIVE_BRIGHTNESS);
 			this.piano.pressKey(note.midi, color);
 
-			this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, note);
+			this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			this.nextNoteIndex++;
 		}
 
 		// Notes OFF
-		this.activeNotes.forEach((note, noteKey) => {
-			if (note.time + note.duration <= this.elapsedTime) {
-				// If match duration is OFF, we manually stop the note.
-				// If it's ON, the synth/sampler is responsible for stopping it at the right time.
-				if (!this.matchNoteDurationToggle.checked) {
-					this.synth.stopNote(note.midi);
-				}
-				this.piano.releaseKey(note.midi);
-				this.activeNotes.delete(noteKey);
+		const notesToRemove: string[] = [];
+		this.activeNotes.forEach((playableNote, noteKey) => {
+			if (playableNote.note.time + playableNote.note.duration <= this.elapsedTime) {
+				notesToRemove.push(noteKey);
 			}
 		});
+
+		if (notesToRemove.length > 0) {
+			const affectedMidiNotes = new Set<number>();
+
+			notesToRemove.forEach((noteKey) => {
+				const playableNote = this.activeNotes.get(noteKey);
+				if (playableNote) {
+					const { note } = playableNote;
+					affectedMidiNotes.add(note.midi);
+
+					// If match duration is OFF, we manually stop the note.
+					// If it's ON, the synth/sampler is responsible for stopping it at the right time.
+					if (!this.matchNoteDurationToggle.checked) {
+						this.synth.stopNote(note.midi);
+					}
+					this.activeNotes.delete(noteKey);
+				}
+			});
+
+			affectedMidiNotes.forEach((midiNote) => {
+				const remainingNotes = Array.from(this.activeNotes.values()).filter((pn) => pn.note.midi === midiNote);
+
+				if (remainingNotes.length > 0) {
+					// Sort by time to find the most recent note to take over the color
+					remainingNotes.sort((a, b) => b.note.time - a.note.time);
+					const lastNote = remainingNotes[0];
+					const color = new Color(CHANNEL_COLORS[lastNote.channel % CHANNEL_COLORS.length]);
+					color.addScalar(ACTIVE_BRIGHTNESS);
+					this.piano.pressKey(lastNote.note.midi, color);
+				} else {
+					// No more notes on this key, release it
+					this.piano.releaseKey(midiNote);
+				}
+			});
+		}
 
 		this.noteVisualizer.noteObjects.position.z = this.elapsedTime * TIME_SCALE;
 		this.updateUI();

@@ -21,6 +21,11 @@ interface NoteInstance {
 	state: "normal" | "active" | "finished";
 }
 
+interface PlayableNote {
+	note: Note;
+	channel: number;
+}
+
 export class NoteVisualizer {
 	private scene: Scene;
 	private piano: Piano;
@@ -111,7 +116,7 @@ export class NoteVisualizer {
 		this.notesByTime = Array.from(this.noteMap.values()).sort((a, b) => a.note.time - b.note.time);
 	}
 
-	public update(elapsedTime: number, activeNotes: Map<string, Note>): void {
+	public update(elapsedTime: number, activeNotes: Map<string, PlayableNote>): void {
 		if (this.notesByTime.length === 0) return;
 
 		const activeNoteKeys = new Set(activeNotes.keys());
