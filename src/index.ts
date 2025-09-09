@@ -217,12 +217,10 @@ class MidiVisualizer {
 				const target = e.target as HTMLInputElement;
 				const volume = parseFloat(target.value);
 				this.synth.setChannelVolume(channel, volume);
-				// Added this
-				if (volume === 0) {
-					this.noteVisualizer.setChannelOpacity(channel, 0.05);
-				} else {
-					this.noteVisualizer.setChannelOpacity(channel, 0.9);
-				}
+
+				// Map volume (0.0 - 1.0) to opacity (0.1 - 0.9)
+				const opacity = 0.1 + volume * 0.8;
+				this.noteVisualizer.setChannelOpacity(channel, opacity);
 			});
 
 			channelDiv.appendChild(label);
@@ -484,8 +482,7 @@ class MidiVisualizer {
 				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
-		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 	}
 
 	private skipTime(seconds: number): void {
@@ -520,8 +517,7 @@ class MidiVisualizer {
 				this.activeNotes.set(`${note.midi}-${note.time}-${channel}`, playableNote);
 			}
 		}
-		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 	}
 
 	private initPiP(): void {
@@ -707,8 +703,7 @@ class MidiVisualizer {
 		requestAnimationFrame(this.animate.bind(this));
 		this.updateFPS(now);
 		this.updatePlayback();
-		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
-		this.noteVisualizer.update(this.elapsedTime, this.activeNotes, isSuperLightweight);
+		this.noteVisualizer.update(this.elapsedTime, this.activeNotes);
 		this.renderer.render(this.scene, this.camera);
 	}
 }

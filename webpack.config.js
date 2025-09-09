@@ -16,6 +16,11 @@ module.exports = {
 				test: /\.css$/,
 				use: [MiniCssExtractPlugin.loader, "css-loader"],
 			},
+			{
+				test: /\.(glsl|vert|frag)$/,
+				use: "raw-loader",
+				exclude: /node_modules/,
+			},
 		],
 	},
 	resolve: {
