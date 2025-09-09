@@ -129,7 +129,13 @@ class MidiVisualizer {
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.pipBtn.addEventListener("click", () => this.togglePiP());
 
-		this.performanceModeSelect.addEventListener("change", () => this.recreateRenderer());
+		this.performanceModeSelect.addEventListener("change", () => {
+			this.recreateRenderer();
+			if (this.midiData) {
+				const performanceMode = this.performanceModeSelect.value as "normal" | "lightweight" | "super-lightweight";
+				this.noteVisualizer.visualize(this.midiData, performanceMode);
+			}
+		});
 
 		this.instrumentSettingsToggle.addEventListener("click", () => {
 			this.instrumentSelectorsContainer.classList.toggle("collapsed");
@@ -409,7 +415,6 @@ class MidiVisualizer {
 			this.populateChannelInstrumentSelectors(Array.from(channels).sort((a, b) => a - b));
 
 			this.resetPlayback();
-			this.uiContainer.style.display = "flex";
 			this.statsDisplay.style.display = "block";
 			this.updateUI();
 		} catch (error) {
