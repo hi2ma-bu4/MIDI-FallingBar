@@ -1,73 +1,73 @@
-# MIDI Falling-Bar Visualizer
+# MIDI FallingBar
 
-This is a web-based MIDI visualizer that displays MIDI notes as "falling bars" in a 3D piano roll format, inspired by modern player pianos and synthesia-style videos. It uses `Three.js` for WebGL rendering and `@tonejs/midi` for MIDI file parsing.
+これは、現代の自動演奏ピアノやSynthesiaスタイルの動画にインスパイアされた、MIDIノートを3Dピアノロール形式の「落下するバー」として表示するウェブベースのMIDIビジュアライザーです。WebGLレンダリングには`Three.js`を、MIDIファイルのパースには`@tonejs/midi`を使用しています。
 
-## Features
+## 特徴
 
-- **3D Visualization**: Notes are rendered as falling bars on a 3D piano keyboard.
-- **Instrument Support**: Different MIDI channels are assigned different colors and can be mapped to various synthesized instruments.
-- **Playback Control**: Play, pause, and seek through the MIDI file.
-- **Playback Speed Control**: Adjust playback speed from 0.5x to 2.0x.
-- **Customizable Camera**: Switch between a perspective view and a top-down view.
-- **Performance Modes**: Choose between different rendering quality modes to optimize for your hardware.
-- **Drag and Drop**: Simply drop a MIDI file onto the page to start.
-- **Picture-in-Picture (PiP)**: Watch the visualization in a floating window while you do other things.
+  - **3Dビジュアライゼーション**: ノートが3Dのピアノキーボード上に落下するバーとしてレンダリングされます。
+  - **楽器のサポート**: MIDIチャンネルごとに異なる色が割り当てられ、さまざまなシンセサイザー音源にマッピングできます。
+  - **再生コントロール**: MIDIファイルの再生、一時停止、シークが可能です。
+  - **再生速度コントロール**: 再生速度を0.5倍から2.0倍まで調整できます。
+  - **カスタマイズ可能なカメラ**: パースビュー（斜めからの視点）とトップダウンビュー（真上からの視点）を切り替えられます。
+  - **パフォーマンスモード**: お使いのハードウェアに合わせて、異なるレンダリング品質モードを選択し、動作を最適化できます。
+  - **ドラッグ＆ドロップ**: MIDIファイルをページ上にドラッグ＆ドロップするだけで開始できます。
+  - **ピクチャー・イン・ピクチャー (PiP)**: 他の作業をしながら、フローティングウィンドウでビジュアライゼーションを視聴できます。
 
-## How to Use
+## 使い方
 
-1. **Open the Visualizer**: Access the visualizer through the deployed link (or open `dist/index.html` if running locally).
-2. **Load a MIDI File**:
-   - Click the "Choose File" button to select a `.mid` or `.midi` file from your computer.
-   - Or, drag and drop a MIDI file anywhere onto the page.
-3. **Control Playback**:
-   - Use the **Play/Pause** button to start and stop the music.
-   - Click on the **progress bar** to seek to a specific point in the song.
-   - Use the **Arrow Left/Right** keys to skip backward or forward by 10 seconds.
-   - Adjust the **Speed** dropdown to change the playback speed.
-4. **Customize Your View**:
-   - **Channel Instruments**: Expand this section to assign different synthesizer sounds to each MIDI channel and adjust their volume.
-   - **Top-Down View**: Toggle the checkbox for an overhead view of the piano.
-   - **Zoom**: Use your mouse wheel, trackpad, or the `-` and `+` keys to zoom in and out.
-   - **Performance Mode**: If you experience lag, try switching to a "Lightweight" mode.
+1.  **ビジュアライザーを開く**: デプロイされたリンクにアクセスするか、ローカルで実行している場合は`dist/index.html`を開きます。
+2.  **MIDIファイルを読み込む**:
+      - 「ファイルを選択」ボタンをクリックして、お使いのコンピュータから`.mid`または`.midi`ファイルを選択します。
+      - または、MIDIファイルをページのどこにでもドラッグ＆ドロップします。
+3.  **再生のコントロール**:
+      - **再生/一時停止**ボタンで音楽を開始・停止します。
+      - **プログレスバー**をクリックして、曲の特定の位置にシークします。
+      - **←/→（左右矢印）キー**で10秒間戻ったり進んだりできます。
+      - **速度**ドロップダウンメニューで再生速度を変更します。
+4.  **表示のカスタマイズ**:
+      - **チャンネル楽器**: このセクションを展開して、各MIDIチャンネルに異なるシンセサイザー音源を割り当て、音量を調整します。
+      - **トップダウンビュー**: チェックボックスをオンにすると、ピアノを真上から見た視点に切り替わります。
+      - **ズーム**: マウスホイール、トラックパッド、または`-`キーと`+`キーでズームイン・ズームアウトします。
+      - **パフォーマンスモード**: 動作が遅い場合は、「軽量」モードへの切り替えを試してください。
 
-## Development
+## 開発
 
-### Prerequisites
+### 前提条件
 
-- [Node.js](https://nodejs.org/) (Version specified in `package.json`'s `volta` field)
-- [npm](https://www.npmjs.com/)
+  - [Node.js](https://nodejs.org/) (`package.json`の`volta`フィールドで指定されたバージョン)
+  - [npm](https://www.npmjs.com/)
 
-### Setup
+### セットアップ
 
-1.  Clone the repository:
+1.  リポジトリをクローンします:
     ```bash
     git clone https://github.com/hi2ma-bu4/MIDI-FallingBar.git
     ```
-2.  Navigate to the project directory:
+2.  プロジェクトディレクトリに移動します:
     ```bash
     cd MIDI-FallingBar
     ```
-3.  Install dependencies:
+3.  依存関係をインストールします:
     ```bash
     npm install
     ```
 
-### Running the Development Server
+### 開発サーバーの実行
 
-To start a local development server with hot-reloading:
+ホットリロード機能付きのローカル開発サーバーを起動するには:
 
 ```bash
 npm start
 ```
 
-This will open the visualizer in your default web browser at `http://localhost:8080`.
+これにより、デフォルトのウェブブラウザで`http://localhost:8080`が開き、ビジュアライザーが表示されます。
 
-### Building for Production
+### プロダクションビルド
 
-To create an optimized production build:
+最適化されたプロダクションビルドを作成するには:
 
 ```bash
 npm run build
 ```
 
-The bundled files will be placed in the `dist/` directory. You can then deploy this directory to any static web host.
+バンドルされたファイルは`dist/`ディレクトリに配置されます。このディレクトリを任意の静的ウェブホストにデプロイできます。

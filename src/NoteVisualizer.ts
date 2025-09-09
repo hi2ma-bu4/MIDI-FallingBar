@@ -3,8 +3,8 @@ import type { Note } from "@tonejs/midi/dist/Note";
 import { BoxGeometry, Color, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Scene, ShaderMaterial, Vector3 } from "three";
 import { BLACK_KEY_WIDTH, Piano, WHITE_KEY_HEIGHT, WHITE_KEY_WIDTH } from "./Piano";
 import { TIME_SCALE } from "./constants";
-import noteVertexShader from "./shaders/note.vert.glsl";
 import noteFragmentShader from "./shaders/note.frag.glsl";
+import noteVertexShader from "./shaders/note.vert.glsl";
 
 const NOTE_BAR_HEIGHT = 0.2;
 export const ACTIVE_BRIGHTNESS = 0.5;
