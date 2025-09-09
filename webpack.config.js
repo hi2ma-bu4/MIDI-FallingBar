@@ -16,6 +16,10 @@ module.exports = {
 				test: /\.css$/,
 				use: [MiniCssExtractPlugin.loader, "css-loader"],
 			},
+			{
+				test: /\.glsl$/,
+				loader: "webpack-glsl-loader",
+			},
 		],
 	},
 	resolve: {
