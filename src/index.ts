@@ -59,7 +59,7 @@ class MidiVisualizer {
 	private frameCount = 0;
 	private lastFPSTime = 0;
 
-	private getInitialPerformanceMode(): "lightweight" | "normal" | "super-lightweight" {
+	private getInitialPerformanceMode(): "lightweight" | "normal" {
 		try {
 			const canvas = document.createElement("canvas");
 			const gl = canvas.getContext("experimental-webgl") || canvas.getContext("webgl");
@@ -70,8 +70,8 @@ class MidiVisualizer {
 					// @ts-ignore
 					const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
 					if (renderer.toLowerCase().includes("intel")) {
-						console.log("Intel GPU detected, enabling super-lightweight mode by default.");
-						return "super-lightweight";
+						console.log("Intel GPU detected, enabling lightweight mode by default.");
+						return "lightweight";
 					}
 				}
 			}
