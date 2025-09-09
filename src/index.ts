@@ -26,10 +26,12 @@ class MidiVisualizer {
 	private isPlaying = false;
 	private midiData: Midi | null = null;
 	private audioContextStartTime = 0;
+	private lastUpdateTime = 0;
 	private elapsedTime = 0;
 	private notesToPlay: PlayableNote[] = [];
 	private nextNoteIndex = 0;
 	private activeNotes: Map<string, PlayableNote> = new Map();
+	private playbackRate = 1.0;
 
 	// UI Elements
 	private playPauseBtn!: HTMLButtonElement;
@@ -45,6 +47,7 @@ class MidiVisualizer {
 	private topDownViewToggle!: HTMLInputElement;
 	private matchNoteDurationToggle!: HTMLInputElement;
 	private performanceModeSelect!: HTMLSelectElement;
+	private playbackSpeedSelect!: HTMLSelectElement;
 	private pipBtn!: HTMLButtonElement;
 	private channelInstruments: Map<number, string> = new Map();
 	private channelInitialVolumes: Map<number, number> = new Map();
@@ -125,9 +128,13 @@ class MidiVisualizer {
 		this.instrumentSettingsToggle = document.getElementById("instrument-settings-toggle") as HTMLHeadingElement;
 		this.matchNoteDurationToggle = document.getElementById("match-note-duration-toggle") as HTMLInputElement;
 		this.pipBtn = document.getElementById("pip-btn") as HTMLButtonElement;
+		this.playbackSpeedSelect = document.getElementById("playback-speed-select") as HTMLSelectElement;
 
 		this.playPauseBtn.addEventListener("click", () => this.togglePlayback());
 		this.pipBtn.addEventListener("click", () => this.togglePiP());
+		this.playbackSpeedSelect.addEventListener("change", (e) => {
+			this.playbackRate = parseFloat((e.target as HTMLSelectElement).value);
+		});
 
 		this.performanceModeSelect.addEventListener("change", () => {
 			this.recreateRenderer();
@@ -260,6 +267,12 @@ class MidiVisualizer {
 
 		// Keyboard zoom
 		window.addEventListener("keydown", (event) => {
+			// Allow input fields to receive key events
+			const activeElement = document.activeElement;
+			if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "SELECT")) {
+				return;
+			}
+
 			// Skip playing track
 			if (event.key === "ArrowRight") {
 				this.skipTime(10);
@@ -267,6 +280,11 @@ class MidiVisualizer {
 			}
 			if (event.key === "ArrowLeft") {
 				this.skipTime(-10);
+				return;
+			}
+			if (event.code === "Space") {
+				event.preventDefault(); // Prevent page scroll
+				this.togglePlayback();
 				return;
 			}
 
@@ -445,7 +463,8 @@ class MidiVisualizer {
 		this.synth.resumeContext();
 		this.isPlaying = !this.isPlaying;
 		if (this.isPlaying) {
-			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
+			this.audioContextStartTime = this.synth.currentTime;
+			this.lastUpdateTime = this.synth.currentTime;
 			this.playPauseBtn.textContent = "Pause";
 			this.statsDisplay.style.display = "block";
 		} else {
@@ -462,7 +481,7 @@ class MidiVisualizer {
 		const percentage = clickX / width;
 		this.elapsedTime = this.midiData.duration * percentage;
 		if (this.isPlaying) {
-			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
+			this.lastUpdateTime = this.synth.currentTime;
 		}
 
 		// Stop all audio and visual feedback
@@ -498,7 +517,7 @@ class MidiVisualizer {
 		this.elapsedTime = Math.max(0, Math.min(this.midiData.duration, newElapsedTime));
 
 		if (this.isPlaying) {
-			this.audioContextStartTime = this.synth.currentTime - this.elapsedTime;
+			this.lastUpdateTime = this.synth.currentTime;
 		}
 
 		// Stop all audio and visual feedback
@@ -630,7 +649,11 @@ class MidiVisualizer {
 	private updatePlayback(): void {
 		if (!this.isPlaying || !this.midiData) return;
 
-		this.elapsedTime = this.synth.currentTime - this.audioContextStartTime;
+		const now = this.synth.currentTime;
+		const deltaTime = now - this.lastUpdateTime;
+		this.elapsedTime += deltaTime * this.playbackRate;
+		this.lastUpdateTime = now;
+
 		if (this.elapsedTime >= this.midiData.duration) {
 			this.elapsedTime = this.midiData.duration;
 			this.resetPlayback();
