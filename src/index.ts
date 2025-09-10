@@ -141,6 +141,7 @@ class MidiVisualizer {
 			if (this.midiData) {
 				const performanceMode = this.performanceModeSelect.value as "normal" | "lightweight" | "super-lightweight";
 				this.noteVisualizer.visualize(this.midiData, performanceMode);
+				this.applyAllChannelOpacities();
 			}
 		});
 
@@ -230,8 +231,14 @@ class MidiVisualizer {
 				const target = e.target as HTMLInputElement;
 				const volume = parseFloat(target.value);
 				this.synth.setChannelVolume(channel, volume);
-				// Mute the channel visually as well
-				const newOpacity = volume > 0 ? 0.9 : 0.05;
+
+				const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
+				let newOpacity: number;
+				if (volume > 0) {
+					newOpacity = 0.9;
+				} else {
+					newOpacity = isSuperLightweight ? 0 : 0.05;
+				}
 				this.noteVisualizer.setChannelOpacity(channel, newOpacity);
 			});
 
@@ -247,6 +254,29 @@ class MidiVisualizer {
 		if (arrow) {
 			arrow.innerHTML = "&#x25BC;";
 		}
+	}
+
+	private applyAllChannelOpacities(): void {
+		const isSuperLightweight = this.performanceModeSelect.value === "super-lightweight";
+		const channelSelectors = this.instrumentSelectorsContainer.querySelectorAll<HTMLDivElement>(".channel-instrument-selector");
+
+		channelSelectors.forEach((channelDiv) => {
+			const volumeSlider = channelDiv.querySelector<HTMLInputElement>('input[type="range"]');
+			const select = channelDiv.querySelector<HTMLSelectElement>("select");
+
+			if (volumeSlider && select && select.dataset.channel) {
+				const channel = parseInt(select.dataset.channel, 10);
+				const volume = parseFloat(volumeSlider.value);
+
+				let newOpacity: number;
+				if (volume > 0) {
+					newOpacity = 0.9;
+				} else {
+					newOpacity = isSuperLightweight ? 0 : 0.05;
+				}
+				this.noteVisualizer.setChannelOpacity(channel, newOpacity);
+			}
+		});
 	}
 
 	private initControls(): void {
@@ -431,6 +461,7 @@ class MidiVisualizer {
 				.sort((a, b) => a.note.time - b.note.time);
 
 			this.populateChannelInstrumentSelectors(Array.from(channels).sort((a, b) => a - b));
+			this.applyAllChannelOpacities();
 
 			this.resetPlayback();
 			this.statsDisplay.style.display = "block";

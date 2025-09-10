@@ -73,6 +73,7 @@ export class NoteVisualizer {
 				material = new ShaderMaterial({
 					uniforms: {
 						uElapsedTime: { value: 0.0 },
+						uOpacity: { value: 0.9 },
 					},
 					vertexShader: noteVertexShader,
 					fragmentShader: noteFragmentShader,
@@ -290,10 +291,18 @@ export class NoteVisualizer {
 			if (mesh.material instanceof MeshStandardMaterial) {
 				mesh.material.opacity = opacity;
 			} else if (mesh.material instanceof ShaderMaterial) {
-				// Note: This requires the shader to handle opacity.
-				// The current fragment shader has a hardcoded opacity.
-				// For simplicity, we'll leave it, but a more robust solution
-				// would involve passing opacity as a uniform.
+				if (this.isSuperLightweight) {
+					if (opacity === 0) {
+						mesh.visible = false;
+					} else {
+						mesh.visible = true;
+						mesh.material.uniforms.uOpacity.value = opacity;
+					}
+				} else {
+					// In lightweight (but not super-lightweight) mode, we might still use shaders
+					// but without the hiding logic. Just pass opacity.
+					mesh.material.uniforms.uOpacity.value = opacity;
+				}
 			}
 		}
 	}
