@@ -8,11 +8,14 @@ uniform float uElapsedTime;
 // Varyings to pass data to the fragment shader
 varying vec3 vColor;
 varying float vState; // 0: normal, 1: active, 2: finished
+varying vec3 vNormal;
 
 const float VISIBLE_START_TIME_OFFSET = 5.0;
 const float VISIBLE_END_TIME_OFFSET = 15.0;
 
 void main() {
+    vNormal = normalize(normalMatrix * normal);
+
     float noteTime = aNoteData.x;
     float noteDuration = aNoteData.y;
 
